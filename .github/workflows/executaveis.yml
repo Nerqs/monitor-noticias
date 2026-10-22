@@ -25,7 +25,11 @@ jobs:
               dist/MonitorNoticias-instalador-windows.exe
           - os: ubuntu-22.04  # glibc mais antiga: o binário roda em mais distribuições
             label: Linux
-            package: dist/MonitorNoticias-linux.tar.gz
+            package: |
+              dist/MonitorNoticias-linux.tar.gz
+              dist/MonitorNoticias-linux-x86_64.AppImage
+              dist/MonitorNoticias-linux-amd64.deb
+              dist/PKGBUILD
     steps:
       - uses: actions/checkout@v5
 
@@ -122,6 +126,35 @@ jobs:
         if: runner.os == 'Linux'
         run: ./dist/MonitorNoticias --autoteste
 
+      - name: Pacotes Linux (AppImage, .deb, PKGBUILD e pasta do Flatpak)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update -q && sudo apt-get install -y -q desktop-file-utils
+          curl -fsSL -o appimagetool https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-x86_64.AppImage
+          chmod +x appimagetool
+          APPIMAGETOOL="$PWD/appimagetool" python linux/pacotes.py appimage deb pkgbuild flatpak
+          desktop-file-validate dist/flatpak/*.desktop
+
+      - name: Instalar e testar o .deb e o AppImage
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get install -y ./dist/MonitorNoticias-linux-amd64.deb
+          test -f /usr/share/applications/io.github.nerqs.MonitorNoticias.desktop
+          (cd /tmp && monitor-noticias --autoteste) | tee deb.txt
+          grep -q "instalação deb -> OK" deb.txt
+          sudo apt-get remove -y monitor-noticias
+          test ! -e /usr/bin/monitor-noticias
+          APPIMAGE_EXTRACT_AND_RUN=1 ./dist/MonitorNoticias-linux-x86_64.AppImage --autoteste | tee appimage.txt
+          grep -q "instalação appimage -> OK" appimage.txt
+
+      - name: Guardar a pasta do Flatpak para o próximo job
+        if: runner.os == 'Linux'
+        uses: actions/upload-artifact@v7
+        with:
+          name: flatpak-fonte
+          path: dist/flatpak
+          retention-days: 1
+
       - uses: actions/upload-artifact@v7
         with:
           name: MonitorNoticias-${{ matrix.label }}
@@ -156,20 +189,96 @@ jobs:
           path: pacotes/MonitorNoticias-android.apk
           retention-days: 30
 
+  arch:
+    name: Arch Linux
+    needs: build
+    runs-on: ubuntu-latest
+    container: archlinux:latest
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          name: MonitorNoticias-Linux
+          path: pacotes
+
+      - name: Gerar o pacote com o PKGBUILD publicado
+        run: |
+          pacman -Syu --noconfirm --needed base-devel
+          useradd -m construtor
+          mkdir /home/construtor/pkg
+          ver=$(sed -n 's/^pkgver=//p' pacotes/PKGBUILD)
+          cp pacotes/PKGBUILD /home/construtor/pkg/
+          # Mesmo nome que o makepkg daria ao baixar da página de versões (o SHA-256 é conferido igual).
+          cp pacotes/MonitorNoticias-linux.tar.gz "/home/construtor/pkg/MonitorNoticias-linux-$ver.tar.gz"
+          chown -R construtor /home/construtor/pkg
+          su construtor -c "cd /home/construtor/pkg && makepkg --noconfirm"
+          mkdir -p saida
+          cp /home/construtor/pkg/monitor-noticias-bin-*.pkg.tar.zst saida/MonitorNoticias-linux-x86_64.pkg.tar.zst
+
+      - name: Instalar e testar
+        run: |
+          pacman -U --noconfirm saida/MonitorNoticias-linux-x86_64.pkg.tar.zst
+          test -f /usr/share/applications/io.github.nerqs.MonitorNoticias.desktop
+          (cd /tmp && monitor-noticias --autoteste) | tee arch.txt
+          grep -q "instalação arch -> OK" arch.txt
+          pacman -R --noconfirm monitor-noticias-bin
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: MonitorNoticias-Arch
+          path: saida/MonitorNoticias-linux-x86_64.pkg.tar.zst
+          retention-days: 30
+
+  flatpak:
+    name: Flatpak
+    needs: build
+    runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/flathub-infra/flatpak-github-actions:freedesktop-24.08
+      options: --privileged
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          name: flatpak-fonte
+          path: flatpak
+
+      - name: Gerar o .flatpak
+        run: |
+          chmod +x flatpak/MonitorNoticias
+          flatpak remote-add --user --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo
+          flatpak-builder --user --install-deps-from=flathub --disable-rofiles-fuse --force-clean \
+            --repo=repo construcao flatpak/io.github.nerqs.MonitorNoticias.json
+          mkdir -p saida
+          # --runtime-repo: ao abrir o arquivo, o sistema baixa o runtime do Flathub sozinho.
+          flatpak build-bundle --runtime-repo=https://dl.flathub.org/repo/flathub.flatpakrepo \
+            repo saida/MonitorNoticias-linux.flatpak io.github.nerqs.MonitorNoticias
+
+      - name: Instalar e testar
+        run: |
+          flatpak install --user -y --noninteractive --bundle saida/MonitorNoticias-linux.flatpak
+          dbus-run-session -- flatpak run io.github.nerqs.MonitorNoticias --autoteste | tee flatpak.txt
+          grep -q "instalação flatpak -> OK" flatpak.txt
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: MonitorNoticias-Flatpak
+          path: saida/MonitorNoticias-linux.flatpak
+          retention-days: 30
+
   release:
     name: Publicar versão
     if: startsWith(github.ref, 'refs/tags/v')
-    needs: [build, android]
+    needs: [build, android, arch, flatpak]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/download-artifact@v8
         with:
           path: pacotes
+          pattern: MonitorNoticias-*
           merge-multiple: true
       - name: Gerar SHA256SUMS.txt
         run: |
           cd pacotes
-          sha256sum MonitorNoticias-* > SHA256SUMS.txt
+          sha256sum MonitorNoticias-* PKGBUILD > SHA256SUMS.txt
           cat SHA256SUMS.txt
       - uses: softprops/action-gh-release@v3
         with:

@@ -1254,9 +1254,7 @@ $$("[data-folder]").forEach((b) => b.addEventListener("click", () =>
   api("/api/open-folder", { method: "POST", body: { folder: b.dataset.folder } }).catch((e) => toast(e.message, true))));
 
 function updateLabel(u) {
-  return u.mode === "portatil"
-    ? "Abre o instalador: o programa passa a ficar instalado, com atalho na área de trabalho, e seus dados vão junto."
-    : "Baixa, confere o SHA-256, fecha, troca os arquivos e abre de novo. Seus dados não mudam.";
+  return u.hint || "Baixa, confere o SHA-256, fecha, troca os arquivos e abre de novo. Seus dados não mudam.";
 }
 async function applyUpdate(button, status) {
   const mark = (cls) => { if (status.id === "update-status") status.className = `small ${cls}`; };
@@ -1287,7 +1285,7 @@ $("#update-check").addEventListener("click", async () => {
     }
     status.className = "small";
     status.innerHTML = `Versão <b>${esc(u.latest)}</b> disponível (você tem ${esc(u.current)}).` +
-      (u.frozen ? (u.auto ? " " + esc(updateLabel(u)) : "") : " Como você roda pelo código-fonte, atualize com <code>git pull</code>.");
+      (u.frozen ? (u.auto || u.mode === "flatpak" ? " " + esc(updateLabel(u)) : "") : " Como você roda pelo código-fonte, atualize com <code>git pull</code>.");
     $("#update-apply").classList.toggle("hidden", !u.auto);
     $("#update-download").classList.toggle("hidden", !(u.frozen && u.has_package));
   } catch (e) { status.className = "small status-bad"; status.textContent = e.message; }
@@ -1301,7 +1299,7 @@ $("#update-download").addEventListener("click", async (ev) => {
     const r = await api("/api/updates/download", { method: "POST" });
     status.className = "small status-ok";
     status.innerHTML = `Pacote da versão ${esc(r.version)} baixado e conferido (SHA-256 ${esc(r.sha256.slice(0, 16))}…).
-      Feche o programa e extraia <code>${esc(r.path)}</code> por cima da pasta atual.`;
+      <code>${esc(r.how)}</code>`;
     $("#update-folder").classList.remove("hidden");
   } catch (e) { status.className = "small status-bad"; status.textContent = e.message; }
   ev.target.disabled = false;
@@ -1315,7 +1313,8 @@ async function checkUpdatesOnStart() {
   if (!u.newer || u.skipped || !u.frozen) return;
   const banner = $("#update-banner");
   $("#update-banner-title").textContent = `Versão ${u.latest} disponível (você tem ${u.current})`;
-  $("#update-banner-text").textContent = u.auto ? updateLabel(u) : "Veja em Saúde → Atualização.";
+  $("#update-banner-text").textContent = u.auto ? updateLabel(u)
+    : u.mode === "flatpak" ? updateLabel(u) + " Veja em Saúde → Atualização." : "Veja em Saúde → Atualização.";
   $("#update-now").classList.toggle("hidden", !u.auto);
   $("#update-skip").onclick = () => {
     banner.classList.add("hidden");

@@ -82,7 +82,9 @@ def self_test() -> int:
         db.close()
     ok = all(code == 200 for code in checks.values()) and sources > 0
     logging.info("autoteste: %s, %d fontes -> %s", checks, sources, "OK" if ok else "FALHOU")
-    print(f"autoteste: {checks}, {sources} fontes -> {'OK' if ok else 'FALHOU'}")
+    from .updates import mode
+
+    print(f"autoteste: {checks}, {sources} fontes, instalação {mode()} -> {'OK' if ok else 'FALHOU'}")
     return 0 if ok else 1
 
 
@@ -206,6 +208,18 @@ def _prepare_data():
     return None
 
 
+def _desktop_entry() -> None:
+    """AppImage: cria o atalho no menu de aplicativos (os outros pacotes já trazem o seu)."""
+    from . import desktop
+
+    try:
+        if desktop.integrate_appimage():
+            logging.info("atalho do AppImage criado no menu de aplicativos")
+            _reschedule()  # se o arquivo mudou de pasta, a coleta agendada aponta para o lugar novo
+    except OSError:
+        logging.exception("não foi possível criar o atalho do AppImage")
+
+
 def _reschedule() -> None:
     """Coleta agendada e alertas apontavam para o .exe antigo: aponta para o instalado."""
     from . import config, scheduler
@@ -244,6 +258,8 @@ def main(argv: list[str] | None = None) -> int:
     if migrated:
         logging.info("dados da versão .zip copiados de %s", migrated)
         _reschedule()
+    if not args.autoteste:
+        _desktop_entry()
 
     if args.autoteste:
         return self_test()

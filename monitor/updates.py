@@ -9,7 +9,10 @@ Com um clique ("Atualizar agora") o programa também se troca sozinho:
                      programa, troca os arquivos e abre de novo.
   Windows .zip       abre o assistente de instalação; a versão instalada
                      copia os dados da pasta do .zip na primeira vez.
-  Linux              troca o executável e abre de novo.
+  Linux (.tar.gz)     troca o executável e abre de novo.
+  AppImage           troca o arquivo .AppImage e abre de novo.
+  .deb / Arch        instala o pacote novo com pkexec (pede a senha) e abre de novo.
+  Flatpak            só baixa e confere: o sandbox não deixa o programa se trocar.
 Os dados ficam fora dos arquivos trocados, então nada se perde.
 """
 
@@ -33,31 +36,64 @@ REPO = "Nerqs/monitor-noticias"
 API = f"https://api.github.com/repos/{REPO}/releases/latest"
 SUMS = "SHA256SUMS.txt"
 INSTALLER = "MonitorNoticias-instalador-windows.exe"
+TARBALL = "MonitorNoticias-linux.tar.gz"
+
+# Pacote de cada forma de instalação no Linux (mesmos nomes que o CI publica).
+LINUX_PACKAGES = {
+    "appimage": "MonitorNoticias-linux-x86_64.AppImage",
+    "deb": "MonitorNoticias-linux-amd64.deb",
+    "arch": "MonitorNoticias-linux-x86_64.pkg.tar.zst",
+    "flatpak": "MonitorNoticias-linux.flatpak",
+}
+# Comando que o pacote .deb/Arch instala no PATH, usado para abrir de novo após atualizar.
+LINUX_COMMAND = "/usr/bin/monitor-noticias"
 
 
 class UpdateError(Exception):
     pass
 
 
-def asset_name() -> str:
-    return "MonitorNoticias-windows.zip" if sys.platform == "win32" else "MonitorNoticias-linux.tar.gz"
+def asset_name(current_mode: str | None = None) -> str:
+    """Pacote que "Baixar e conferir" baixa para o jeito como o programa está instalado."""
+    if sys.platform == "win32":
+        return "MonitorNoticias-windows.zip"
+    return LINUX_PACKAGES.get(current_mode or mode(), TARBALL)
 
 
 def mode() -> str:
-    """Como o programa está rodando: fonte, android, instalado, portatil (.zip) ou linux."""
+    """Como o programa está rodando: fonte, android, instalado, portatil (.zip), linux (.tar.gz),
+    appimage, deb, arch ou flatpak."""
     if config.is_android():
         return "android"
     if not getattr(sys, "frozen", False):
         return "fonte"
     if sys.platform == "win32":
         return "instalado" if config.is_installed() else "portatil"
-    return "linux"
+    found = config.install_format()
+    return found if found in LINUX_PACKAGES else "linux"
 
 
 def auto_asset(current_mode: str | None = None) -> str | None:
     """Pacote usado na atualização com um clique (None = não dá para trocar sozinho)."""
-    return {"instalado": INSTALLER, "portatil": INSTALLER,
-            "linux": "MonitorNoticias-linux.tar.gz"}.get(current_mode or mode())
+    current_mode = current_mode or mode()
+    if current_mode == "flatpak":
+        return None  # dentro do sandbox não dá para reinstalar o próprio Flatpak
+    return {"instalado": INSTALLER, "portatil": INSTALLER, "linux": TARBALL,
+            **LINUX_PACKAGES}.get(current_mode)
+
+
+def hint(current_mode: str) -> str:
+    """O que o botão de atualizar faz (ou como atualizar quando ele não aparece)."""
+    return {
+        "portatil": "Abre o instalador: o programa passa a ficar instalado, com atalho na área de trabalho, "
+                    "e seus dados vão junto.",
+        "deb": "Baixa, confere o SHA-256 e instala o .deb novo (o sistema pede sua senha). "
+               "Depois o programa abre de novo. Seus dados não mudam.",
+        "arch": "Baixa, confere o SHA-256 e instala o pacote novo com o pacman (o sistema pede sua senha). "
+                "Depois o programa abre de novo. Seus dados não mudam.",
+        "flatpak": "No Flatpak use \"Baixar e conferir\" e abra o arquivo baixado (ou rode "
+                   "flatpak install --user no arquivo). Seus dados não mudam.",
+    }.get(current_mode, "Baixa, confere o SHA-256, fecha, troca os arquivos e abre de novo. Seus dados não mudam.")
 
 
 def _client(cfg: dict, max_mb: float = 2):
@@ -99,7 +135,9 @@ def check(cfg: dict | None = None) -> dict:
         "newer": bool(latest) and version_key(latest) > version_key(__version__),
         "notes": (release.get("body") or "")[:3000],
         "url": release.get("html_url"),
-        "has_package": asset_name() in assets,
+        "has_package": asset_name(current_mode) in assets,
+        "package": asset_name(current_mode),
+        "hint": hint(current_mode),
         "has_sums": SUMS in assets,
         "frozen": bool(getattr(sys, "frozen", False)),
         "mode": current_mode,
@@ -155,7 +193,17 @@ def download(cfg: dict | None = None) -> dict:
     path = _folder() / f"{tag}-{name}"
     path.write_bytes(package)
     return {"path": str(path), "folder": str(path.parent), "sha256": hashlib.sha256(package).hexdigest(),
-            "version": tag.lstrip("v")}
+            "version": tag.lstrip("v"), "how": _manual_steps(mode(), path)}
+
+
+def _manual_steps(current_mode: str, path: Path) -> str:
+    """Como instalar à mão o pacote baixado por "Baixar e conferir"."""
+    return {
+        "flatpak": f"Feche o programa e rode: flatpak install --user --bundle \"{path}\"",
+        "deb": f"Feche o programa e rode: sudo dpkg -i \"{path}\"",
+        "arch": f"Feche o programa e rode: sudo pacman -U \"{path}\"",
+        "appimage": "Feche o programa e troque o seu arquivo .AppImage por este (deixe-o executável).",
+    }.get(current_mode, f"Feche o programa e extraia {path} por cima da pasta atual.")
 
 
 # --- Atualizar com um clique ------------------------------------------------------
@@ -194,15 +242,39 @@ def _replace_linux(package: bytes, exe: Path) -> None:
             data = tar.extractfile(member).read()
     except tarfile.TarError as exc:
         raise UpdateError(f"Pacote inválido: {exc}")
-    novo = exe.with_name(f".{exe.name}.novo")
+    _replace_file(data, exe)  # no Linux dá para trocar o arquivo com o programa aberto
+
+
+def _replace_file(data: bytes, target: Path) -> None:
+    """Troca um arquivo executável de uma vez (cópia ao lado + rename atômico)."""
+    novo = target.with_name(f".{target.name}.novo")
     try:
         novo.write_bytes(data)
         novo.chmod(0o755)
-        os.replace(novo, exe)  # no Linux dá para trocar o arquivo com o programa aberto
+        os.replace(novo, target)
     except OSError as exc:
         novo.unlink(missing_ok=True)
-        raise UpdateError(f"Não foi possível trocar o executável em {exe.parent} ({exc}). "
+        raise UpdateError(f"Não foi possível trocar {target.name} em {target.parent} ({exc}). "
                           "Use \"Baixar e conferir\" e troque o arquivo manualmente.")
+
+
+def _install_with_pkexec(current_mode: str, package: bytes, tag: str) -> None:
+    """.deb/Arch: grava o pacote e pede ao sistema para instalá-lo como administrador."""
+    import shutil
+
+    if not shutil.which("pkexec"):
+        raise UpdateError("Não achei o pkexec para pedir a senha de administrador. Use \"Baixar e conferir\" "
+                          "e instale o pacote pela central de programas ou pelo terminal.")
+    name = LINUX_PACKAGES[current_mode]
+    folder = _folder()
+    for old in folder.glob(f"*{name}"):
+        old.unlink(missing_ok=True)
+    path = folder / f"{tag}-{name}"
+    path.write_bytes(package)
+    path.chmod(0o644)  # o gerenciador de pacotes roda como root, mas há distros que leem como outro usuário
+    install = (["dpkg", "-i"] if current_mode == "deb" else ["pacman", "-U", "--noconfirm"])
+    # Abre de novo mesmo se a pessoa cancelar a senha (aí continua na versão atual).
+    _launch(["sh", "-c", 'sleep 2; pkexec "$@"; exec ' + LINUX_COMMAND, "atualizar", *install, str(path)])
 
 
 def apply(cfg: dict | None = None) -> dict:
@@ -210,12 +282,26 @@ def apply(cfg: dict | None = None) -> dict:
     cfg = cfg or config.load_config()
     current_mode = mode()
     name = auto_asset(current_mode)
+    if current_mode == "flatpak":
+        raise UpdateError(hint(current_mode))
     if not name:
         raise UpdateError("Atualização automática só funciona no executável. "
                           "Rodando pelo código-fonte, atualize com git pull.")
     package, tag = _fetch_verified(cfg, name)
     version = tag.lstrip("v")
-    if current_mode == "linux":
+    if current_mode == "appimage":
+        image = Path(os.environ.get("APPIMAGE") or "")
+        if not image.is_file():
+            raise UpdateError("Não achei o arquivo .AppImage em uso (variável APPIMAGE). "
+                              "Use \"Baixar e conferir\" e troque o arquivo manualmente.")
+        _replace_file(package, image)  # o AppImage aberto continua montado até fechar
+        _launch(["sh", "-c", 'sleep 2; exec "$0" "$@"', str(image), *sys.argv[1:]])
+        message = f"Versão {version} instalada. O programa vai fechar e abrir de novo."
+    elif current_mode in ("deb", "arch"):
+        _install_with_pkexec(current_mode, package, tag)
+        message = (f"Instalando a versão {version}: digite sua senha na janela do sistema. "
+                   "O programa vai fechar e abrir de novo.")
+    elif current_mode == "linux":
         exe = Path(sys.executable).resolve()
         _replace_linux(package, exe)
         _launch(["sh", "-c", 'sleep 2; exec "$0" "$@"', str(exe), *sys.argv[1:]])

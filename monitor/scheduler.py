@@ -23,7 +23,10 @@ WINDOWS = sys.platform == "win32"
 def program_command(*args: str) -> list[str]:
     """Comando que inicia este programa (executável ou Python + run.py)."""
     if getattr(sys, "frozen", False):
-        return [sys.executable, *args]
+        if os.environ.get("FLATPAK_ID"):  # o sistema só enxerga o app pelo "flatpak run"
+            return ["flatpak", "run", os.environ["FLATPAK_ID"], *args]
+        # No AppImage o executável fica numa montagem temporária; o arquivo de verdade é $APPIMAGE.
+        return [os.environ.get("APPIMAGE") or sys.executable, *args]
     python = Path(sys.executable)
     if WINDOWS:
         quiet = python.with_name("pythonw.exe")  # sem janela de console piscando
@@ -55,6 +58,9 @@ def _quote(parts: list[str]) -> str:
 def install(cfg: dict) -> str:
     if config.is_android():
         raise RuntimeError("No Android a coleta roda ao abrir o app. Para avisos no celular, use o Telegram.")
+    if not WINDOWS and os.environ.get("FLATPAK_ID"):
+        raise RuntimeError("No Flatpak o programa não alcança o crontab do sistema. Ligue o modo de alertas "
+                           "(inicia com o sistema e coleta sozinho) ou use o .deb, o AppImage ou o pacote do Arch.")
     sched = cfg.get("schedule", {})
     at = _parse_time(sched.get("time"))
     args = ["--so-coletar"] + (["--email"] if sched.get("send_email") else [])
@@ -154,7 +160,9 @@ def status(cfg: dict | None = None, now: datetime | None = None) -> dict:
 # --- Modo residente ao entrar no sistema --------------------------------------
 
 def _autostart_file() -> Path:
-    base = Path(os.environ.get("XDG_CONFIG_HOME") or Path.home() / ".config")
+    # No Flatpak o XDG_CONFIG_HOME é do sandbox; o manifesto libera só ~/.config/autostart.
+    base = Path.home() / ".config" if os.environ.get("FLATPAK_ID") else \
+        Path(os.environ.get("XDG_CONFIG_HOME") or Path.home() / ".config")
     return base / "autostart" / "monitor-noticias.desktop"
 
 

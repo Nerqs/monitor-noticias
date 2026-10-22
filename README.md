@@ -60,8 +60,32 @@ instalada copia os dados da pasta `data` do .zip (e deixa um aviso `DADOS-MOVIDO
 
 **Atualização automática:** ao abrir, o programa consulta o GitHub e, se houver versão nova, mostra um
 aviso com **Atualizar agora**. Com um clique ele baixa, confere o SHA-256, fecha, instala por cima e abre
-de novo. Na versão .zip o mesmo botão abre o instalador; no Linux ele troca o executável. Dá para desligar o
+de novo. Na versão .zip o mesmo botão abre o instalador; no Linux depende do pacote (veja abaixo). Dá para desligar o
 aviso em Configurações → Aparência e leitura.
+
+## Instalar no Linux
+
+Na página de [versões](https://github.com/Nerqs/monitor-noticias/releases/latest) tem um pacote para cada
+jeito de instalar. Todos criam o atalho **Monitor de notícias** no menu de aplicativos e guardam os dados
+em `~/.local/share/MonitorNoticias` (no Flatpak, `~/.var/app/io.github.nerqs.MonitorNoticias/data`).
+
+| Pacote | Para quem | Como instalar | Atualizar agora |
+| --- | --- | --- | --- |
+| **MonitorNoticias-linux-amd64.deb** | Ubuntu, Debian, Mint, Pop!_OS | dois cliques, ou `sudo apt install ./MonitorNoticias-linux-amd64.deb` | instala o .deb novo (pede a senha) |
+| **MonitorNoticias-linux-x86_64.pkg.tar.zst** | Arch, Manjaro, EndeavourOS | `sudo pacman -U MonitorNoticias-linux-x86_64.pkg.tar.zst` | instala com o pacman (pede a senha) |
+| **PKGBUILD** | Arch, se preferir compilar o pacote | numa pasta só com ele: `makepkg -si` | idem |
+| **MonitorNoticias-linux-x86_64.AppImage** | qualquer distribuição, sem instalar | `chmod +x` no arquivo e abra; na 1ª vez ele cria o atalho no menu | troca o próprio arquivo |
+| **MonitorNoticias-linux.flatpak** | quem usa Flatpak | dois cliques, ou `flatpak install --user MonitorNoticias-linux.flatpak` | baixa e confere; você instala o arquivo |
+
+No Flatpak o programa roda isolado e não consegue se reinstalar; o botão **Baixar e conferir** baixa o
+pacote novo (com o SHA-256 conferido) e mostra o comando. A coleta agendada pelo crontab também não funciona
+de dentro do Flatpak: use o modo de alertas (que inicia com o sistema) ou outro formato.
+
+Quem já usava o `.tar.gz` não perde nada: o .deb, o pacote do Arch e o AppImage copiam os dados da pasta
+`data` antiga na primeira vez que abrem (como a versão instalada do Windows).
+
+Para gerar os pacotes você mesmo: `python empacotar.py` e depois `python linux/pacotes.py` (o AppImage precisa
+do [appimagetool](https://github.com/AppImage/appimagetool); o Flatpak sai do manifesto em `dist/flatpak/`).
 
 ## Baixar e usar (sem instalar nada)
 

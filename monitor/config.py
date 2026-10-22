@@ -46,7 +46,7 @@ def is_android() -> bool:
     return os.environ.get("MONITOR_PLATFORM") == "android"
 
 
-INSTALL_MARK = "instalacao.ini"  # gravado pelo instalador do Windows ao lado do .exe
+INSTALL_MARK = "instalacao.ini"  # gravado pelo instalador do Windows (e pelos pacotes Linux) ao lado do programa
 PORTABLE_NOTE = "versao-portatil.txt"  # onde a versão .zip guarda os dados (para migrar)
 MOVED_NOTE = "DADOS-MOVIDOS.txt"
 
@@ -56,9 +56,28 @@ def is_installed() -> bool:
     return bool(getattr(sys, "frozen", False)) and (Path(sys.executable).resolve().parent / INSTALL_MARK).exists()
 
 
+def install_format() -> str | None:
+    """Formato do pacote instalado: "windows", "appimage", "deb", "arch", "flatpak" ou None.
+
+    Os pacotes Linux gravam ``formato=...`` no instalacao.ini; o do Windows só a versão.
+    """
+    if not is_installed():
+        return None
+    mark = Path(sys.executable).resolve().parent / INSTALL_MARK
+    try:
+        found = re.search(r"^\s*formato\s*=\s*(\w+)", mark.read_text(encoding="utf-8", errors="replace"), re.M)
+    except OSError:
+        found = None
+    return found.group(1).lower() if found else ("windows" if sys.platform == "win32" else None)
+
+
 def user_data_dir() -> Path:
-    """Pasta de dados do usuário no sistema (LOCALAPPDATA no Windows)."""
-    base = Path(os.environ.get("LOCALAPPDATA") or Path.home() / ".local" / "share")
+    """Pasta de dados do usuário no sistema (LOCALAPPDATA no Windows, XDG_DATA_HOME no Linux).
+
+    No Flatpak o XDG_DATA_HOME aponta para ~/.var/app/<id>/data, a única pasta gravável.
+    """
+    base = Path(os.environ.get("LOCALAPPDATA") or os.environ.get("XDG_DATA_HOME")
+                or Path.home() / ".local" / "share")
     return base / "MonitorNoticias"
 
 
