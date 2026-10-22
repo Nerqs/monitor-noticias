@@ -142,6 +142,10 @@ NEW_ITEM_COLUMNS = (
 _fts_available: bool | None = None
 
 _local = threading.local()
+# Várias requisições abrem conexão ao mesmo tempo quando o programa inicia; a
+# migração de um banco antigo roda uma thread por vez, senão duas tentam criar
+# a mesma coluna ("duplicate column name").
+_migrate_lock = threading.Lock()
 
 
 def now_iso() -> str:
@@ -167,8 +171,9 @@ def connect() -> sqlite3.Connection:
         conn = sqlite3.connect(path, timeout=30)
         conn.row_factory = sqlite3.Row
         conn.execute("PRAGMA journal_mode=WAL")
-        conn.executescript(SCHEMA)
-        _migrate(conn)
+        with _migrate_lock:
+            conn.executescript(SCHEMA)
+            _migrate(conn)
         _local.conn, _local.path = conn, path
     return conn
 
@@ -179,7 +184,11 @@ def _migrate(conn: sqlite3.Connection) -> None:
     columns = {row[1] for row in conn.execute("PRAGMA table_info(items)")}
     for name, ddl in NEW_ITEM_COLUMNS:
         if name not in columns:
-            conn.execute(f"ALTER TABLE items ADD COLUMN {name} {ddl}")
+            try:
+                conn.execute(f"ALTER TABLE items ADD COLUMN {name} {ddl}")
+            except sqlite3.OperationalError as exc:  # outro processo já criou
+                if "duplicate column" not in str(exc):
+                    raise
     conn.execute("UPDATE items SET base_score=score, base_reasons=reasons WHERE base_score IS NULL")
     conn.execute("CREATE INDEX IF NOT EXISTS idx_items_source ON items(source_id, fetched_at)")
     try:

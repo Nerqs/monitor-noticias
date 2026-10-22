@@ -42,3 +42,36 @@ def test_endpoints():
     assert c.post("/api/heartbeat", headers={"X-Token": "t"}).status_code == 200
     assert c.post("/api/bye", headers={"X-Token": "t"}).status_code == 200
     assert c.post("/api/bye").status_code == 403
+
+
+def test_migracao_com_varias_threads(data_dir):
+    """Banco antigo + várias requisições ao abrir não pode dar "duplicate column name"."""
+    import sqlite3
+    import threading
+
+    from monitor import db
+
+    db.connect()
+    db.close()
+    conn = sqlite3.connect(db.db_path())
+    for name, _ddl in db.NEW_ITEM_COLUMNS[-2:]:
+        conn.execute(f"ALTER TABLE items DROP COLUMN {name}")
+    conn.commit()
+    conn.close()
+
+    errors = []
+
+    def worker():
+        try:
+            db.connect()
+        except Exception as exc:  # noqa: BLE001
+            errors.append(exc)
+        finally:
+            db.close()
+
+    threads = [threading.Thread(target=worker) for _ in range(8)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+    assert errors == []
