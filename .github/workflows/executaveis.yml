@@ -69,7 +69,9 @@ jobs:
         run: |
           sudo apt-get update -q
           sudo apt-get install -y -q libxkbfile1 libxcb-cursor0 libxcb-icccm4 libxcb-image0 \
-            libxcb-keysyms1 libxcb-render-util0 libxcb-util1 xvfb
+            libxcb-keysyms1 libxcb-render-util0 libxcb-util1 libxcb-randr0 libxcb-shape0 \
+            libxcb-xfixes0 libxcb-xinerama0 libxcb-xkb1 libxcb-sync1 libxcb-shm0 libxkbcommon0 \
+            libxkbcommon-x11-0 xvfb
           # Estas o PyInstaller deixa de fora (são do driver de vídeo); todo desktop tem.
           sudo apt-get install -y -q libegl1 libgl1
 
@@ -145,7 +147,10 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           QT_QPA_PLATFORM=xcb xvfb-run -a ./dist/MonitorNoticias --testar-janela | tee janela.txt
-          grep -q "motor=qtwebengine.*-> OK" janela.txt
+          grep -q "motor=qtwebengine.*-> OK" janela.txt || {
+            # Mostra qual biblioteca o Qt não achou.
+            QT_DEBUG_PLUGINS=1 QT_QPA_PLATFORM=xcb xvfb-run -a ./dist/MonitorNoticias --testar-janela 2>&1 | grep -iE "cannot|not found|failed" | head -20
+            exit 1; }
 
       - name: Pacotes Linux (AppImage, .deb, PKGBUILD e pasta do Flatpak)
         if: runner.os == 'Linux'
