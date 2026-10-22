@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import argparse
 import logging
+import os
 import sys
 import threading
 import webbrowser
@@ -45,6 +46,30 @@ def run_headless(send_email: bool) -> int:
             print(f"E-mail não enviado: {exc}")
             return 1
     return 0
+
+
+def self_test() -> int:
+    """Confere se o pacote está completo (usado ao gerar o executável)."""
+    import tempfile
+
+    from . import config
+
+    with tempfile.TemporaryDirectory() as tmp:
+        os.environ["MONITOR_DATA_DIR"] = tmp
+        client = web.create_app("t").test_client()
+        checks = {
+            "leitor": client.get("/").status_code,
+            "estilo": client.get("/static/style.css").status_code,
+            "script": client.get("/static/app.js").status_code,
+            "api": client.get("/api/counts", headers={"X-Token": "t"}).status_code,
+            "email": client.get("/email/preview?t=t").status_code,
+        }
+        sources = len(config.load_sources())
+        db.close()
+    ok = all(code == 200 for code in checks.values()) and sources > 0
+    logging.info("autoteste: %s, %d fontes -> %s", checks, sources, "OK" if ok else "FALHOU")
+    print(f"autoteste: {checks}, {sources} fontes -> {'OK' if ok else 'FALHOU'}")
+    return 0 if ok else 1
 
 
 def run_gui(collect: bool, use_browser: bool) -> int:
@@ -81,12 +106,22 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--email", action="store_true", help="com --so-coletar, envia o resumo por e-mail")
     parser.add_argument("--navegador", action="store_true", help="abre no navegador em vez da janela própria")
     parser.add_argument("--version", action="version", version=__version__)
+    parser.add_argument("--autoteste", action="store_true", help=argparse.SUPPRESS)
     args = parser.parse_args(argv)
 
-    logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
+    if sys.stderr is None:
+        # Executável sem console (Windows): registra em data/monitor.log.
+        from . import config
+
+        logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s",
+                            filename=config.data_dir() / "monitor.log", encoding="utf-8")
+    else:
+        logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
     logging.getLogger("werkzeug").setLevel(logging.WARNING)
     logging.getLogger("httpx").setLevel(logging.WARNING)
 
+    if args.autoteste:
+        return self_test()
     if args.so_coletar:
         return run_headless(args.email)
     return run_gui(args.coletar, args.navegador)
