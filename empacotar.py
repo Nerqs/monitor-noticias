@@ -6,7 +6,8 @@ Resultado:
   Windows: dist/MonitorNoticias/MonitorNoticias.exe (pasta inteira, compactada em
            dist/MonitorNoticias-windows.zip) e o instalador com assistente
            dist/MonitorNoticias-instalador-windows.exe (precisa do Inno Setup 6)
-  Linux:   dist/MonitorNoticias (arquivo único), compactado em dist/MonitorNoticias-linux.tar.gz
+  Linux:   dist/MonitorNoticias (arquivo único), compactado em dist/MonitorNoticias-linux.tar.gz.
+           AppImage, .deb, PKGBUILD e Flatpak saem depois com: python linux/pacotes.py
 """
 
 from __future__ import annotations
@@ -94,6 +95,11 @@ def main() -> int:
         with tarfile.open(archive, "w:gz") as tar:
             tar.add(dist / NAME, arcname=f"{NAME}/{NAME}")
             tar.add(ROOT / "LEIA-ME.txt", arcname=f"{NAME}/LEIA-ME.txt")
+            from PIL import Image
+
+            icon = dist / "icone-512.png"  # usado pelo PKGBUILD para o atalho no menu
+            Image.open(ROOT / "assets" / "icone.png").resize((512, 512), Image.LANCZOS).save(icon)
+            tar.add(icon, arcname=f"{NAME}/icone.png")
     print(f"Pacote gerado: {archive}")
     return 0
 

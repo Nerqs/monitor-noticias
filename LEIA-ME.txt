@@ -10,6 +10,9 @@ Windows
 Linux
   Rode ./MonitorNoticias
   Se a janela própria não abrir, o programa abre no navegador.
+  Prefere instalar, com atalho no menu? Na página de versões tem .deb (Ubuntu,
+  Debian, Mint), pacote do Arch, AppImage e Flatpak. Eles copiam os dados
+  desta pasta na primeira vez que abrem.
 
 Prefere instalar, com atalho na área de trabalho? Baixe
 MonitorNoticias-instalador-windows.exe na página de versões. A versão instalada
