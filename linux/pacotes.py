@@ -140,7 +140,7 @@ def build_deb() -> Path:
     (control / "control").write_text(
         f"Package: {COMMAND}\nVersion: {version()}\nArchitecture: amd64\n"
         "Maintainer: Nerqs <96776286+Nerqs@users.noreply.github.com>\nSection: net\nPriority: optional\n"
-        f"Depends: libc6 (>= 2.35)\nInstalled-Size: {size_kb}\nHomepage: {REPO_URL}\n"
+        f"Depends: libc6 (>= 2.35), libegl1, libgl1\nInstalled-Size: {size_kb}\nHomepage: {REPO_URL}\n"
         f"Description: {SUMMARY}\n {DESCRIPTION}\n", encoding="utf-8")
     out = DIST / "MonitorNoticias-linux-amd64.deb"
     subprocess.run(["dpkg-deb", "--root-owner-group", "-Zxz", "--build", str(root), str(out)], check=True)
@@ -165,7 +165,7 @@ pkgdesc="{SUMMARY}"
 arch=('x86_64')
 url="{REPO_URL}"
 license=('LicenseRef-proprietary')
-depends=('glibc')
+depends=('glibc' 'libglvnd')  # libEGL/libGL do Qt: o executável não as leva
 provides=('{COMMAND}')
 conflicts=('{COMMAND}')
 # O executável do PyInstaller carrega os módulos anexados ao fim do arquivo: strip estraga.
@@ -204,6 +204,9 @@ FLATPAK_PERMISSIONS = [
     "--talk-name=org.kde.StatusNotifierWatcher",   # ícone na bandeja
     "--talk-name=org.freedesktop.secrets",         # senha do e-mail no chaveiro
     "--filesystem=xdg-config/autostart:create",    # iniciar com o sistema
+    # O executável se descompacta numa pasta temporária a cada abertura (~700 MB com o Qt).
+    # O /tmp do Flatpak é pequeno e fica na memória; o /var/tmp dele fica no disco.
+    "--env=TMPDIR=/var/tmp",
 ]
 
 

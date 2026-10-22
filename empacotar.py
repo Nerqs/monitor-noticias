@@ -79,6 +79,14 @@ def main() -> int:
         args += ["--collect-all", "clr_loader", "--collect-all", "pythonnet", "--hidden-import", "clr"]
     else:
         args += ["--onefile"]
+        # No Linux a janela própria usa o Qt embutido (PySide6, LGPL): o GTK do sistema não
+        # carrega no Python do executável. Só os módulos do Qt que o pywebview usa: o
+        # resto (QtNfc, drivers de SQL...) deixaria o executável com o dobro do tamanho.
+        for module in ("QtCore", "QtGui", "QtWidgets", "QtNetwork", "QtWebChannel",
+                       "QtWebEngineCore", "QtWebEngineWidgets"):
+            args += ["--hidden-import", f"PySide6.{module}"]
+        for module in ("PyQt5", "PyQt6", "gi"):
+            args += ["--exclude-module", module]
     args.append(str(ROOT / "run.py"))
     subprocess.run(args, check=True, cwd=ROOT)
 

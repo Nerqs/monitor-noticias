@@ -10,3 +10,7 @@ keyring>=24
 pywebview>=5.0
 pystray>=0.19
 pillow>=10
+# Linux: janela própria com o Qt (LGPL), que vai dentro do executável.
+PySide6-Essentials>=6.12; sys_platform == "linux"
+PySide6-WebEngine>=6.12; sys_platform == "linux"
+qtpy>=2.4; sys_platform == "linux"

@@ -75,3 +75,16 @@ def test_migracao_com_varias_threads(data_dir):
     for t in threads:
         t.join()
     assert errors == []
+
+
+def test_never_opened_only_without_any_beat():
+    assert not presence.never_opened(since=0.0, now=presence.OPEN_LIMIT - 1)
+    assert presence.never_opened(since=0.0, now=presence.OPEN_LIMIT)
+    presence.beat()
+    assert not presence.never_opened(since=0.0, now=presence.OPEN_LIMIT * 10)
+
+
+def test_wait_returns_false_when_browser_never_opens(monkeypatch):
+    clock = iter(range(0, 10_000, 60))
+    monkeypatch.setattr(presence.time, "monotonic", lambda: float(next(clock)))
+    assert presence.wait_until_gone(poll=0) is False

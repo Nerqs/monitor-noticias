@@ -195,7 +195,7 @@ class _Window:
         self.hidden = hidden
         self.calls = []
         self.events = type("E", (), {})()
-        for name in ("closing", "minimized", "restored"):
+        for name in ("closing", "closed", "minimized", "restored"):
             setattr(self.events, name, _Event())
 
     def __getattr__(self, name):  # hide, show, restore, destroy, evaluate_js
@@ -211,7 +211,7 @@ def test_window_close_goes_to_tray(monkeypatch):
     created = {}
     fake = types.SimpleNamespace(renderer="edgechromium")
     fake.create_window = lambda *a, hidden=False, **k: created.setdefault("w", _Window(hidden))
-    fake.start = lambda func=None, window=None: func(window) if func else None
+    fake.start = lambda func=None, window=None, gui=None: func(window) if func else None
     monkeypatch.setitem(sys.modules, "webview", fake)
     desk = resident.Desktop("http://127.0.0.1:1/")
     monkeypatch.setattr(desk, "start_tray", lambda gtk_main_loop=False: True)
@@ -230,3 +230,23 @@ def test_window_close_goes_to_tray(monkeypatch):
     assert window.calls[-2:] == ["show", "restore"]
     desk.quit()
     assert closing() is True and window.calls[-1] == "destroy"
+
+
+def test_page_js_falls_back_to_run_js_when_csp_blocks_eval():
+    class Qt:
+        def evaluate_js(self, script):
+            raise RuntimeError("Refused to evaluate a string as JavaScript because unsafe-eval is not allowed")
+
+        def run_js(self, script):
+            return "Monitor de notícias"
+
+    assert resident.page_js(Qt(), "document.title") == "Monitor de notícias"
+
+
+def test_closed_window_quits_even_if_webview_start_hangs(monkeypatch):
+    monkeypatch.setattr(resident, "QUIT_GRACE", 0.01)
+    desk = resident.Desktop("http://127.0.0.1:1/")
+    quit_called = threading.Event()
+    desk.on_quit = quit_called.set
+    desk.on_closed()
+    assert quit_called.wait(2)

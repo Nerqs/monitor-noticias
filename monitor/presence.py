@@ -15,6 +15,9 @@ import time
 IDLE_LIMIT = 150.0
 # Depois do "tchau", espera um pouco: recarregar a página manda um sinal novo.
 BYE_GRACE = 8.0
+# Sem nenhum sinal nesse tempo, o navegador não abriu (ex.: Linux sem navegador
+# padrão): melhor avisar e sair do que ficar rodando escondido para sempre.
+OPEN_LIMIT = 120.0
 
 _lock = threading.Lock()
 _last_beat: float | None = None
@@ -50,8 +53,26 @@ def page_gone(now: float | None = None) -> bool:
         return now - _last_beat >= IDLE_LIMIT
 
 
-def wait_until_gone(stop: threading.Event | None = None, poll: float = 1.0) -> None:
+def opened() -> bool:
+    """True depois que alguma página deu sinal de vida."""
+    with _lock:
+        return _last_beat is not None
+
+
+def never_opened(since: float, now: float | None = None) -> bool:
+    """True quando nenhuma aba deu sinal de vida em OPEN_LIMIT segundos desde `since`."""
+    now = time.monotonic() if now is None else now
+    with _lock:
+        return _last_beat is None and now - since >= OPEN_LIMIT
+
+
+def wait_until_gone(stop: threading.Event | None = None, poll: float = 1.0) -> bool:
+    """Espera a última aba fechar. False se o navegador nunca chegou a abrir a página."""
     stop = stop or threading.Event()
+    since = time.monotonic()
     while not stop.wait(poll):
         if page_gone():
-            return
+            return True
+        if never_opened(since):
+            return False
+    return True
