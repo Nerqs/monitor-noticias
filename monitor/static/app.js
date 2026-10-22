@@ -702,6 +702,7 @@ async function pollStatus() {
   clearTimeout(pollTimer);
   let data;
   try { data = await api("/api/status"); } catch (_) { pollTimer = setTimeout(pollStatus, IDLE_POLL); return; }
+  clearTimeout(pollTimer);  // outra consulta pode ter agendado a próxima enquanto esta esperava
   const p = data.progress;
   const status = $("#collect-status");
   if (p.running) {
@@ -721,9 +722,7 @@ async function pollStatus() {
     // rodando quando o programa abriu (agendada ou com --coletar).
     if (state.sawRunning || (state.lastRunId !== null && state.lastRunId !== run.id)) {
       toast(p.message || `${run.new_items} notícias novas.`, false);
-      if (state.page === "reader") loadItems();
-      if (state.page === "erros") loadErrors();
-      if (state.page === "fontes") loadSources();
+      refreshAfterCollection();
     }
     state.lastRunId = run.id;
     state.sawRunning = false;
@@ -734,6 +733,18 @@ async function pollStatus() {
 }
 
 $("#collect-btn").addEventListener("click", () => startCollect());
+
+// Notícias novas chegaram: atualiza tudo o que mostra contagens, em qualquer página.
+// O menu lateral fica sempre visível, então os contadores não dependem da lista.
+function refreshAfterCollection() {
+  loadCounts();
+  if (state.page === "reader") {
+    loadItems();
+    if (state.selectedId === null) renderEmptyReader();
+  }
+  if (state.page === "erros") loadErrors();
+  if (state.page === "fontes") loadSources();
+}
 
 function healthNotices(h) {
   if (!h || !h.schedule) return "";
@@ -1649,7 +1660,11 @@ renderEmptyReader();
 pollStatus();
 fillSourceSelects();
 setTimeout(checkUpdatesOnStart, 3000);
-setInterval(() => { if (state.page === "reader") loadCounts(); }, 60000);
+setInterval(loadCounts, 60000);
+// Janela minimizada ou em segundo plano atrasa os temporizadores: ao voltar,
+// confere na hora se uma coleta terminou nesse meio-tempo.
+document.addEventListener("visibilitychange", () => { if (!document.hidden) pollStatus(); });
+window.addEventListener("focus", () => pollStatus());
 
 // Sinal de vida: no modo navegador o programa encerra sozinho quando a última aba fecha.
 const heartbeat = () => api("/api/heartbeat", { method: "POST" }).catch(() => {});
