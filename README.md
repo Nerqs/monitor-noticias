@@ -26,42 +26,46 @@ resumo bonito por e-mail.
 | --- | --- |
 | ![Leitor](docs/leitor-escuro.png) | ![Para você](docs/para-voce.png) |
 
-## Instalação
+## Baixar e usar (sem instalar nada)
 
-Precisa do [Python 3.10 ou mais novo](https://www.python.org/downloads/). No Windows, marque
-"Add Python to PATH" ao instalar.
+1. Abra a página de [versões](https://github.com/Nerqs/monitor-noticias/releases/latest).
+2. Baixe **MonitorNoticias-windows.zip** (Windows) ou **MonitorNoticias-linux.tar.gz** (Linux).
+3. Descompacte numa pasta sua (por exemplo, Documentos) e abra **MonitorNoticias.exe**.
+
+Não precisa de Python: ele já vem dentro do programa. Na primeira vez o Windows pode avisar
+"O Windows protegeu o computador", porque o programa não tem assinatura digital. Clique em
+**Mais informações** e depois em **Executar assim mesmo**.
+
+Seus dados ficam na pasta `data`, ao lado do programa. Para atualizar, baixe a versão nova e copie a pasta
+`data` para dentro dela.
+
+No Linux, se a janela própria não abrir, o programa usa o navegador. Para ter a janela, instale
+`python3-gi` e `gir1.2-webkit2-4.1` (Debian/Ubuntu).
+
+## Rodar a partir do código (para quem tem Python)
+
+Precisa do [Python 3.10 ou mais novo](https://www.python.org/downloads/).
 
 ```bash
 git clone https://github.com/Nerqs/monitor-noticias.git
 cd monitor-noticias
 ```
 
-**Windows:** dê dois cliques em `iniciar.bat`.
-**Linux:** rode `./iniciar.sh`.
-
-Na primeira vez o script cria um ambiente virtual (`.venv`) e instala as dependências. Depois disso abre
-direto.
-
-No Linux, a janela própria usa GTK ou Qt. Se ela não abrir, o programa usa o navegador automaticamente. Para
-ter a janela, instale um dos dois:
-
-```bash
-sudo apt install python3-gi gir1.2-webkit2-4.1   # GTK (Debian/Ubuntu)
-# ou
-.venv/bin/pip install "pywebview[qt]"            # Qt
-```
+**Windows:** dê dois cliques em `iniciar.bat`. **Linux:** rode `./iniciar.sh`.
+Na primeira vez o script cria um ambiente virtual (`.venv`) e instala as dependências.
 
 ## Uso
 
-| Comando | O que faz |
+| Parâmetro | O que faz |
 | --- | --- |
-| `python run.py` | Abre o leitor |
-| `python run.py --coletar` | Abre o leitor e já começa a coletar |
-| `python run.py --so-coletar` | Coleta sem abrir janela e mostra o resultado no terminal |
-| `python run.py --so-coletar --email` | Coleta e envia o resumo por e-mail |
-| `python run.py --navegador` | Usa o navegador em vez da janela própria |
+| (nenhum) | Abre o leitor |
+| `--coletar` | Abre o leitor e já começa a coletar |
+| `--so-coletar` | Coleta sem abrir janela |
+| `--so-coletar --email` | Coleta e envia o resumo por e-mail |
+| `--navegador` | Usa o navegador em vez da janela própria |
 
-Os scripts `iniciar.bat` e `iniciar.sh` aceitam os mesmos parâmetros.
+Funcionam com o executável (`MonitorNoticias.exe --coletar`), com `python run.py` e com os scripts
+`iniciar.bat` / `iniciar.sh`. No Windows o executável não tem console: o resultado fica em `data/monitor.log`.
 
 **Atalhos no leitor:** `j`/`k` próxima/anterior, `g` gostei, `n` não curti, `s` favoritar,
 `m` lida/não lida, `a` ler artigo aqui, `o` abrir no navegador.
@@ -69,10 +73,9 @@ Os scripts `iniciar.bat` e `iniciar.sh` aceitam os mesmos parâmetros.
 ### Rodar sozinho de manhã (opcional)
 
 - **Windows:** Agendador de Tarefas → Criar tarefa básica → programa
-  `C:\caminho\monitor-noticias\.venv\Scripts\python.exe`, argumentos `run.py --so-coletar --email`,
-  "Iniciar em" `C:\caminho\monitor-noticias`.
+  `C:\caminho\MonitorNoticias\MonitorNoticias.exe`, argumentos `--so-coletar --email`.
 - **Linux:** `crontab -e` e adicione
-  `0 7 * * 1-5 cd ~/monitor-noticias && .venv/bin/python run.py --so-coletar --email`.
+  `0 7 * * 1-5 ~/MonitorNoticias/MonitorNoticias --so-coletar --email`.
 
 ## E-mail
 
@@ -137,6 +140,10 @@ python -m venv .venv
 .venv/bin/pip install -r requirements.txt pytest
 .venv/bin/python -m pytest
 ```
+
+Para gerar o executável: `pip install pyinstaller` e `python empacotar.py` (o resultado fica em `dist/`).
+O GitHub Actions faz isso a cada PR para Windows e Linux. Ao criar uma tag `v*`
+(ex.: `git tag v0.2.0 && git push origin v0.2.0`), os pacotes são publicados em Releases.
 
 Estrutura:
 

@@ -1,0 +1,21 @@
+MONITOR DE NOTÍCIAS
+===================
+
+Windows
+  Abra MonitorNoticias.exe. Não precisa instalar Python nem mais nada.
+  Na primeira vez o Windows pode mostrar "O Windows protegeu o computador"
+  (o programa ainda não tem assinatura digital). Clique em "Mais informações"
+  e depois em "Executar assim mesmo".
+
+Linux
+  Rode ./MonitorNoticias
+  Se a janela própria não abrir, o programa abre no navegador.
+
+Seus dados (notícias, fontes, configurações e o arquivo monitor.log) ficam na
+pasta "data", ao lado do programa. Para atualizar, baixe a versão nova e copie
+a pasta "data" para ela.
+
+Coleta agendada (sem abrir a janela):
+  MonitorNoticias.exe --so-coletar --email
+
+Mais detalhes: https://github.com/Nerqs/monitor-noticias

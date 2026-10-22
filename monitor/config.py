@@ -11,6 +11,7 @@ import copy
 import os
 import re
 import shutil
+import sys
 import threading
 from pathlib import Path
 
@@ -33,8 +34,25 @@ EMAIL_PRESETS = {
 _lock = threading.Lock()
 
 
+def _default_data_dir() -> Path:
+    if not getattr(sys, "frozen", False):
+        return PACKAGE_DIR.parent / "data"
+    # Executável: a pasta "data" fica ao lado do .exe, para ser fácil de achar e
+    # copiar. Se ali não der para gravar (ex.: Arquivos de Programas), usa a pasta do usuário.
+    beside = Path(sys.executable).resolve().parent / "data"
+    try:
+        beside.mkdir(parents=True, exist_ok=True)
+        probe = beside / ".teste-escrita"
+        probe.write_text("ok")
+        probe.unlink()
+        return beside
+    except OSError:
+        base = Path(os.environ.get("LOCALAPPDATA") or Path.home() / ".local" / "share")
+        return base / "MonitorNoticias"
+
+
 def data_dir() -> Path:
-    path = Path(os.environ.get("MONITOR_DATA_DIR") or PACKAGE_DIR.parent / "data")
+    path = Path(os.environ.get("MONITOR_DATA_DIR") or _default_data_dir())
     path.mkdir(parents=True, exist_ok=True)
     return path
 

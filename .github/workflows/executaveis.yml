@@ -1,0 +1,76 @@
+name: Testes e executáveis
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: ${{ matrix.label }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            label: Windows
+            package: dist/MonitorNoticias-windows.zip
+          - os: ubuntu-22.04  # glibc mais antiga: o binário roda em mais distribuições
+            label: Linux
+            package: dist/MonitorNoticias-linux.tar.gz
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Instalar dependências
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt pyinstaller pytest
+
+      - name: Testes
+        run: python -m pytest -q
+
+      - name: Gerar executável
+        run: python empacotar.py
+
+      - name: Autoteste do executável (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $p = Start-Process -FilePath dist\MonitorNoticias\MonitorNoticias.exe -ArgumentList '--autoteste' -Wait -PassThru
+          if ($p.ExitCode -ne 0) { throw "autoteste falhou: código $($p.ExitCode)" }
+
+      - name: Autoteste do executável (Linux)
+        if: runner.os == 'Linux'
+        run: ./dist/MonitorNoticias --autoteste
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: MonitorNoticias-${{ matrix.label }}
+          path: ${{ matrix.package }}
+          retention-days: 30
+
+  release:
+    name: Publicar versão
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: pacotes
+          merge-multiple: true
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: pacotes/*
+          generate_release_notes: true
