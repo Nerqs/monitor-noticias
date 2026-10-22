@@ -136,3 +136,15 @@ def test_installed_copies_portable_data_once(monkeypatch, tmp_path):
     (target / config.PORTABLE_NOTE).write_text(str(portable))
     assert config.migrate_portable() is None  # já tem banco: não sobrescreve
     assert (target / "monitor.db").read_bytes() == b"novo"
+
+
+def test_migrates_portable_without_database(monkeypatch, tmp_path):
+    """Quem só abriu a versão .zip (sem coletar) tem configurações mas pode não ter banco."""
+    portable = tmp_path / "zip" / "data"
+    portable.mkdir(parents=True)
+    (portable / "config.yaml").write_text("x: 1")
+    target = tmp_path / "local"
+    target.mkdir()
+    (target / config.PORTABLE_NOTE).write_text(str(portable))
+    assert config.migrate_portable(target) == portable.resolve()
+    assert (target / "config.yaml").read_text() == "x: 1" and (portable / config.MOVED_NOTE).exists()
