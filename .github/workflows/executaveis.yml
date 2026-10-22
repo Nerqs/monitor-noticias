@@ -50,6 +50,14 @@ jobs:
           $p = Start-Process -FilePath dist\MonitorNoticias\MonitorNoticias.exe -ArgumentList '--autoteste' -Wait -PassThru
           if ($p.ExitCode -ne 0) { throw "autoteste falhou: código $($p.ExitCode)" }
 
+      - name: Janela própria abre no executável (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $p = Start-Process -FilePath dist\MonitorNoticias\MonitorNoticias.exe -ArgumentList '--testar-janela' -Wait -PassThru
+          Get-Content dist\MonitorNoticias\data\logs\monitor.log -ErrorAction SilentlyContinue | Select-Object -Last 40
+          if ($p.ExitCode -ne 0) { throw "a janela própria não abriu: código $($p.ExitCode)" }
+
       - name: Autoteste do executável (Linux)
         if: runner.os == 'Linux'
         run: ./dist/MonitorNoticias --autoteste

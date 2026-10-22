@@ -42,7 +42,9 @@ def main() -> int:
         "--add-data", f"{ROOT / 'monitor' / 'static'}{sep}monitor/static",
         "--add-data", f"{ROOT / 'monitor' / 'defaults'}{sep}monitor/defaults",
         "--collect-submodules", "keyring.backends",
-        "--collect-submodules", "webview",
+        # Tudo do pywebview, inclusive as DLLs do WebView2 (webview/lib), sem as
+        # quais a janela própria falha e o programa cai para o navegador.
+        "--collect-all", "webview",
         "--collect-submodules", "pystray",
         "--add-data", f"{ROOT / 'monitor' / '_build_deps.json'}{sep}monitor",
         "--collect-data", "readability",
@@ -50,6 +52,8 @@ def main() -> int:
     if WINDOWS:
         # Pasta (abre mais rápido e o antivírus implica menos) e sem janela de console.
         args += ["--onedir", "--windowed"]
+        # No Windows o pywebview usa o Edge (WebView2) através do pythonnet.
+        args += ["--collect-all", "clr_loader", "--collect-all", "pythonnet", "--hidden-import", "clr"]
     else:
         args += ["--onefile"]
     args.append(str(ROOT / "run.py"))

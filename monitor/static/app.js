@@ -1352,3 +1352,12 @@ renderEmptyReader();
 pollStatus();
 fillSourceSelects();
 setInterval(() => { if (state.page === "reader") loadCounts(); }, 60000);
+
+// Sinal de vida: no modo navegador o programa encerra sozinho quando a última aba fecha.
+const heartbeat = () => api("/api/heartbeat", { method: "POST" }).catch(() => {});
+heartbeat();
+setInterval(heartbeat, 20000);
+document.addEventListener("visibilitychange", () => { if (!document.hidden) heartbeat(); });
+window.addEventListener("pagehide", () => {
+  fetch("/api/bye", { method: "POST", keepalive: true, headers: { "X-Token": TOKEN } }).catch(() => {});
+});
