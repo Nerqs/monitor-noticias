@@ -92,6 +92,10 @@ jobs:
         run: |
           $setup = "dist\MonitorNoticias-instalador-windows.exe"
           if (-not (Test-Path $setup)) { throw "instalador não foi gerado" }
+          # Quem usa o .zip já tem banco; o teste da janela fecha antes de a página criar o
+          # banco (depende do tempo), então o diagnóstico abre o banco de forma garantida.
+          Start-Process -FilePath dist\MonitorNoticias\MonitorNoticias.exe -ArgumentList '--diagnostico' -Wait | Out-Null
+          if (-not (Test-Path "dist\MonitorNoticias\data\monitor.db")) { throw "a versão .zip não criou o banco" }
           $opts = '/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART','/CURRENTUSER','/SEMABRIR=1'
           $p = Start-Process $setup -ArgumentList ($opts + '/LOG=instalacao.log') -Wait -PassThru
           if ($p.ExitCode -ne 0) { Get-Content instalacao.log -Tail 40; throw "instalação falhou: $($p.ExitCode)" }
