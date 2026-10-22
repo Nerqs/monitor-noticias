@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0">
+<channel>
+  <title>Exemplo Segurança</title>
+  <link>https://exemplo.com</link>
+  <item>
+    <title>Zero-day in Laravel framework actively exploited (CVE-2026-12345)</title>
+    <link>https://exemplo.com/laravel-zero-day?utm_source=rss</link>
+    <guid>https://exemplo.com/laravel-zero-day</guid>
+    <description><![CDATA[<p>Attackers are exploiting a <b>remote code execution</b> flaw.</p>]]></description>
+    <pubDate>Tue, 20 Oct 2026 10:00:00 GMT</pubDate>
+  </item>
+  <item>
+    <title>New open source resource for designers</title>
+    <link>https://exemplo.com/design</link>
+    <description>A source of inspiration and force for good.</description>
+    <pubDate>Tue, 20 Oct 2026 09:00:00 GMT</pubDate>
+  </item>
+</channel>
+</rss>

@@ -1,0 +1,146 @@
+"""Leitura e gravação das configurações e da lista de fontes.
+
+Os arquivos do usuário ficam na pasta de dados (``data/`` ao lado do programa,
+ou a pasta definida em ``MONITOR_DATA_DIR``). Na primeira execução eles são
+copiados de ``monitor/defaults``.
+"""
+
+from __future__ import annotations
+
+import copy
+import os
+import re
+import shutil
+import threading
+from pathlib import Path
+
+import yaml
+
+PACKAGE_DIR = Path(__file__).resolve().parent
+DEFAULTS_DIR = PACKAGE_DIR / "defaults"
+
+SOURCE_TYPES = ["rss", "cisa_kev", "nvd", "github_advisories", "scrape"]
+CATEGORIES = ["seguranca", "tecnologia"]
+
+EMAIL_PRESETS = {
+    "outlook": {"smtp_host": "smtp-mail.outlook.com", "smtp_port": 587, "security": "starttls"},
+    "office365": {"smtp_host": "smtp.office365.com", "smtp_port": 587, "security": "starttls"},
+    "gmail": {"smtp_host": "smtp.gmail.com", "smtp_port": 587, "security": "starttls"},
+    "yahoo": {"smtp_host": "smtp.mail.yahoo.com", "smtp_port": 465, "security": "ssl"},
+    "custom": {},
+}
+
+_lock = threading.Lock()
+
+
+def data_dir() -> Path:
+    path = Path(os.environ.get("MONITOR_DATA_DIR") or PACKAGE_DIR.parent / "data")
+    path.mkdir(parents=True, exist_ok=True)
+    return path
+
+
+def _user_file(name: str) -> Path:
+    path = data_dir() / name
+    if not path.exists():
+        shutil.copy(DEFAULTS_DIR / name, path)
+    return path
+
+
+def _read_yaml(path: Path) -> dict:
+    with open(path, encoding="utf-8") as fh:
+        return yaml.safe_load(fh) or {}
+
+
+def _write_yaml(path: Path, data: dict) -> None:
+    tmp = path.with_suffix(".tmp")
+    with open(tmp, "w", encoding="utf-8") as fh:
+        yaml.safe_dump(data, fh, allow_unicode=True, sort_keys=False)
+    tmp.replace(path)
+
+
+def _merge(defaults: dict, user: dict) -> dict:
+    """Completa as configurações do usuário com chaves novas dos padrões."""
+    result = copy.deepcopy(defaults)
+    for key, value in (user or {}).items():
+        if isinstance(value, dict) and isinstance(result.get(key), dict):
+            result[key] = _merge(result[key], value)
+        else:
+            result[key] = value
+    return result
+
+
+# --- Configurações gerais -------------------------------------------------
+
+def load_config() -> dict:
+    with _lock:
+        defaults = _read_yaml(DEFAULTS_DIR / "config.yaml")
+        return _merge(defaults, _read_yaml(_user_file("config.yaml")))
+
+
+def save_config(config: dict) -> None:
+    with _lock:
+        _write_yaml(_user_file("config.yaml"), config)
+
+
+# --- Fontes ---------------------------------------------------------------
+
+def load_sources() -> list[dict]:
+    with _lock:
+        return _read_yaml(_user_file("sources.yaml")).get("sources", [])
+
+
+def save_sources(sources: list[dict]) -> None:
+    with _lock:
+        _write_yaml(_user_file("sources.yaml"), {"sources": sources})
+
+
+def slugify(text: str) -> str:
+    slug = re.sub(r"[^a-z0-9]+", "-", text.lower()).strip("-")
+    return slug or "fonte"
+
+
+def validate_source(source: dict) -> list[str]:
+    """Devolve a lista de problemas encontrados (vazia se estiver tudo certo)."""
+    problems = []
+    if not str(source.get("name", "")).strip():
+        problems.append("Informe um nome.")
+    url = str(source.get("url", "")).strip()
+    if not re.match(r"^https?://", url):
+        problems.append("A URL precisa começar com http:// ou https://.")
+    if source.get("type") not in SOURCE_TYPES:
+        problems.append("Tipo de fonte inválido.")
+    if source.get("category") not in CATEGORIES:
+        problems.append("Categoria inválida.")
+    if source.get("type") == "scrape":
+        for key in ("item_selector", "title_selector"):
+            if not str(source.get(key, "")).strip():
+                problems.append(f"Para raspagem, preencha '{key}'.")
+    return problems
+
+
+def upsert_source(source: dict, original_id: str | None = None) -> dict:
+    """Inclui uma fonte nova ou atualiza uma existente."""
+    sources = load_sources()
+    clean = {k: v for k, v in source.items() if v not in (None, "")}
+    clean["enabled"] = bool(source.get("enabled", True))
+    if original_id:
+        clean["id"] = original_id
+        sources = [clean if s["id"] == original_id else s for s in sources]
+    else:
+        base = slugify(clean.get("id") or clean["name"])
+        existing = {s["id"] for s in sources}
+        new_id, n = base, 2
+        while new_id in existing:
+            new_id, n = f"{base}-{n}", n + 1
+        clean["id"] = new_id
+        sources.append(clean)
+    save_sources(sources)
+    return clean
+
+
+def delete_source(source_id: str) -> None:
+    save_sources([s for s in load_sources() if s["id"] != source_id])
+
+
+def get_source(source_id: str) -> dict | None:
+    return next((s for s in load_sources() if s["id"] == source_id), None)
