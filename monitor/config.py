@@ -114,7 +114,9 @@ def migrate_portable(target: Path | None = None) -> Path | None:
     if not note.exists() or (target / "monitor.db").exists():
         return None
     source = Path(note.read_text(encoding="utf-8").strip())
-    if not (source / "monitor.db").exists() or source.resolve() == target.resolve():
+    # Banco ou configurações: quem só abriu a versão .zip uma vez pode não ter banco ainda.
+    has_data = any((source / name).exists() for name in ("monitor.db", "config.yaml", "sources.yaml"))
+    if not has_data or source.resolve() == target.resolve():
         return None
     shutil.copytree(source, target, dirs_exist_ok=True,
                     ignore=shutil.ignore_patterns("atualizacoes", ".teste-escrita", MOVED_NOTE))
