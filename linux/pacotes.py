@@ -36,6 +36,15 @@ DESCRIPTION = ("Coleta notícias de segurança e tecnologia em vários sites, co
                "críticas que afetam o que você usa e mostra tudo num leitor próprio, com envio por e-mail.")
 
 
+# Bibliotecas do sistema que o executável usa e não leva (empacotar.LINUX_SYSTEM_LIBS).
+DEB_DEPENDS = ("libc6 (>= 2.35), libstdc++6, libegl1, libgl1, libgbm1, libfontconfig1, libfreetype6, "
+               "libnss3, libxkbcommon0, libxkbcommon-x11-0, libdbus-1-3, libglib2.0-0 | libglib2.0-0t64, "
+               "libasound2 | libasound2t64")
+ARCH_DEPENDS = " ".join(f"'{d}'" for d in (
+    "glibc", "gcc-libs", "libglvnd", "mesa", "fontconfig", "freetype2", "nss", "libxkbcommon-x11",
+    "dbus", "glib2", "alsa-lib"))
+
+
 def version() -> str:
     text = (ROOT / "monitor" / "__init__.py").read_text(encoding="utf-8")
     return re.search(r'__version__ = "([^"]+)"', text).group(1)
@@ -140,7 +149,7 @@ def build_deb() -> Path:
     (control / "control").write_text(
         f"Package: {COMMAND}\nVersion: {version()}\nArchitecture: amd64\n"
         "Maintainer: Nerqs <96776286+Nerqs@users.noreply.github.com>\nSection: net\nPriority: optional\n"
-        f"Depends: libc6 (>= 2.35), libegl1, libgl1\nInstalled-Size: {size_kb}\nHomepage: {REPO_URL}\n"
+        f"Depends: {DEB_DEPENDS}\nInstalled-Size: {size_kb}\nHomepage: {REPO_URL}\n"
         f"Description: {SUMMARY}\n {DESCRIPTION}\n", encoding="utf-8")
     out = DIST / "MonitorNoticias-linux-amd64.deb"
     subprocess.run(["dpkg-deb", "--root-owner-group", "-Zxz", "--build", str(root), str(out)], check=True)
@@ -165,7 +174,7 @@ pkgdesc="{SUMMARY}"
 arch=('x86_64')
 url="{REPO_URL}"
 license=('LicenseRef-proprietary')
-depends=('glibc' 'libglvnd')  # libEGL/libGL do Qt: o executável não as leva
+depends=({ARCH_DEPENDS})
 provides=('{COMMAND}')
 conflicts=('{COMMAND}')
 # O executável do PyInstaller carrega os módulos anexados ao fim do arquivo: strip estraga.
