@@ -1173,6 +1173,28 @@ $("#cleanup-run").addEventListener("click", async () => {
 $$("[data-folder]").forEach((b) => b.addEventListener("click", () =>
   api("/api/open-folder", { method: "POST", body: { folder: b.dataset.folder } }).catch((e) => toast(e.message, true))));
 
+function updateLabel(u) {
+  return u.mode === "portatil"
+    ? "Abre o instalador: o programa passa a ficar instalado, com atalho na área de trabalho, e seus dados vão junto."
+    : "Baixa, confere o SHA-256, fecha, troca os arquivos e abre de novo. Seus dados não mudam.";
+}
+async function applyUpdate(button, status) {
+  const mark = (cls) => { if (status.id === "update-status") status.className = `small ${cls}`; };
+  if (button) button.disabled = true;
+  mark("");
+  status.textContent = "Baixando e conferindo o hash…";
+  try {
+    const r = await api("/api/updates/apply", { method: "POST" });
+    mark("status-ok");
+    status.textContent = r.message;
+    toast(r.message);
+  } catch (e) {
+    mark("status-bad");
+    status.textContent = e.message;
+    if (button) button.disabled = false;
+  }
+}
+
 $("#update-check").addEventListener("click", async () => {
   const status = $("#update-status");
   status.textContent = "Consultando o GitHub…";
@@ -1185,10 +1207,12 @@ $("#update-check").addEventListener("click", async () => {
     }
     status.className = "small";
     status.innerHTML = `Versão <b>${esc(u.latest)}</b> disponível (você tem ${esc(u.current)}).` +
-      (u.frozen ? "" : " Como você roda pelo código-fonte, atualize com <code>git pull</code>.");
+      (u.frozen ? (u.auto ? " " + esc(updateLabel(u)) : "") : " Como você roda pelo código-fonte, atualize com <code>git pull</code>.");
+    $("#update-apply").classList.toggle("hidden", !u.auto);
     $("#update-download").classList.toggle("hidden", !(u.frozen && u.has_package));
   } catch (e) { status.className = "small status-bad"; status.textContent = e.message; }
 });
+$("#update-apply").addEventListener("click", (ev) => applyUpdate(ev.currentTarget, $("#update-status")));
 $("#update-download").addEventListener("click", async (ev) => {
   const status = $("#update-status");
   ev.currentTarget.disabled = true;
@@ -1202,6 +1226,25 @@ $("#update-download").addEventListener("click", async (ev) => {
   } catch (e) { status.className = "small status-bad"; status.textContent = e.message; }
   ev.target.disabled = false;
 });
+
+// Aviso de versão nova ao abrir (silencioso se estiver sem internet).
+async function checkUpdatesOnStart() {
+  if (document.body.dataset.checkUpdates !== "1") return;
+  let u;
+  try { u = await api("/api/updates/check", { method: "POST" }); } catch (_) { return; }
+  if (!u.newer || u.skipped || !u.frozen) return;
+  const banner = $("#update-banner");
+  $("#update-banner-title").textContent = `Versão ${u.latest} disponível (você tem ${u.current})`;
+  $("#update-banner-text").textContent = u.auto ? updateLabel(u) : "Veja em Saúde → Atualização.";
+  $("#update-now").classList.toggle("hidden", !u.auto);
+  $("#update-skip").onclick = () => {
+    banner.classList.add("hidden");
+    api("/api/updates/skip", { method: "POST", body: { version: u.latest } }).catch(() => {});
+  };
+  banner.classList.remove("hidden");
+}
+$("#update-later").addEventListener("click", () => $("#update-banner").classList.add("hidden"));
+$("#update-now").addEventListener("click", (ev) => applyUpdate(ev.currentTarget, $("#update-banner-text")));
 
 $("#report-copy").addEventListener("click", async () => {
   const area = $("#report-text");
@@ -1428,6 +1471,7 @@ loadItems();
 renderEmptyReader();
 pollStatus();
 fillSourceSelects();
+setTimeout(checkUpdatesOnStart, 3000);
 setInterval(() => { if (state.page === "reader") loadCounts(); }, 60000);
 
 // Sinal de vida: no modo navegador o programa encerra sozinho quando a última aba fecha.

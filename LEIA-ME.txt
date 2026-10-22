@@ -11,9 +11,13 @@ Linux
   Rode ./MonitorNoticias
   Se a janela própria não abrir, o programa abre no navegador.
 
+Prefere instalar, com atalho na área de trabalho? Baixe
+MonitorNoticias-instalador-windows.exe na página de versões. A versão instalada
+copia sozinha os dados desta pasta na primeira vez que abrir.
+
 Seus dados (notícias, fontes, configurações e a pasta logs) ficam na
-pasta "data", ao lado do programa. Para atualizar, baixe a versão nova e copie
-a pasta "data" para ela.
+pasta "data", ao lado do programa. Quando sair versão nova, o programa avisa ao
+abrir: clique em "Atualizar agora".
 
 Coleta agendada (sem abrir a janela):
   MonitorNoticias.exe --so-coletar --email

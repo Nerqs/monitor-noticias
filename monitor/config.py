@@ -46,9 +46,29 @@ def is_android() -> bool:
     return os.environ.get("MONITOR_PLATFORM") == "android"
 
 
+INSTALL_MARK = "instalacao.ini"  # gravado pelo instalador do Windows ao lado do .exe
+PORTABLE_NOTE = "versao-portatil.txt"  # onde a versão .zip guarda os dados (para migrar)
+MOVED_NOTE = "DADOS-MOVIDOS.txt"
+
+
+def is_installed() -> bool:
+    """Executável instalado pelo instalador (e não a pasta extraída do .zip)."""
+    return bool(getattr(sys, "frozen", False)) and (Path(sys.executable).resolve().parent / INSTALL_MARK).exists()
+
+
+def user_data_dir() -> Path:
+    """Pasta de dados do usuário no sistema (LOCALAPPDATA no Windows)."""
+    base = Path(os.environ.get("LOCALAPPDATA") or Path.home() / ".local" / "share")
+    return base / "MonitorNoticias"
+
+
 def _default_data_dir() -> Path:
     if not getattr(sys, "frozen", False):
         return PACKAGE_DIR.parent / "data"
+    if is_installed():
+        # Instalado: o programa pode ser trocado por uma versão nova a qualquer
+        # momento, então os dados ficam na pasta do usuário, longe dele.
+        return user_data_dir()
     # Executável: a pasta "data" fica ao lado do .exe, para ser fácil de achar e
     # copiar. Se ali não der para gravar (ex.: Arquivos de Programas), usa a pasta do usuário.
     beside = Path(sys.executable).resolve().parent / "data"
@@ -59,14 +79,53 @@ def _default_data_dir() -> Path:
         probe.unlink()
         return beside
     except OSError:
-        base = Path(os.environ.get("LOCALAPPDATA") or Path.home() / ".local" / "share")
-        return base / "MonitorNoticias"
+        return user_data_dir()
 
 
 def data_dir() -> Path:
     path = Path(os.environ.get("MONITOR_DATA_DIR") or _default_data_dir())
     path.mkdir(parents=True, exist_ok=True)
     return path
+
+
+def remember_portable() -> None:
+    """A versão .zip anota onde estão os dados, para a versão instalada achar depois."""
+    if not getattr(sys, "frozen", False) or is_installed() or os.environ.get("MONITOR_DATA_DIR"):
+        return
+    folder = data_dir().resolve()
+    target = user_data_dir()
+    if folder == target.resolve():
+        return
+    try:
+        target.mkdir(parents=True, exist_ok=True)
+        (target / PORTABLE_NOTE).write_text(str(folder), encoding="utf-8")
+    except OSError:
+        pass
+
+
+def migrate_portable(target: Path | None = None) -> Path | None:
+    """Na primeira vez da versão instalada, traz os dados da versão .zip.
+
+    Copia (não move) tudo menos os pacotes de atualização baixados e deixa um
+    aviso na pasta antiga. Só roda se a pasta nova ainda não tem banco.
+    """
+    target = target or data_dir()
+    note = target / PORTABLE_NOTE
+    if not note.exists() or (target / "monitor.db").exists():
+        return None
+    source = Path(note.read_text(encoding="utf-8").strip())
+    if not (source / "monitor.db").exists() or source.resolve() == target.resolve():
+        return None
+    shutil.copytree(source, target, dirs_exist_ok=True,
+                    ignore=shutil.ignore_patterns("atualizacoes", ".teste-escrita", MOVED_NOTE))
+    note.unlink(missing_ok=True)
+    try:
+        (source / MOVED_NOTE).write_text(
+            f"Os dados desta pasta foram copiados para a versão instalada, em:\n{target}\n\n"
+            "Esta pasta (e a do programa .zip) pode ser apagada.\n", encoding="utf-8")
+    except OSError:
+        pass
+    return source
 
 
 def _user_file(name: str) -> Path:
