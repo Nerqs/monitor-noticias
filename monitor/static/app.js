@@ -81,7 +81,7 @@ const icon = (name) => `<svg class="icon"><use href="#i-${name}"/></svg>`;
 
 const VIEW_TITLES = {
   criticos: "Críticos", minhas: "Minhas tecnologias", paravoce: "Para você", seguranca: "Segurança",
-  tecnologia: "Tecnologia", favoritos: "Favoritos", todos: "Todas as notícias",
+  tecnologia: "Tecnologia", favoritos: "Favoritos", todos: "Todas as notícias", silenciadas: "Silenciadas",
 };
 
 function badges(item) {
@@ -89,6 +89,14 @@ function badges(item) {
   if (item.level === "critico") html += '<span class="badge critico">CRÍTICO</span>';
   else if (item.level === "alto") html += '<span class="badge alto">ALTO</span>';
   if (item.kev) html += '<span class="badge kev" title="Catálogo de falhas exploradas da CISA">EXPLORADA</span>';
+  if (item.version_verdict === "afeta") {
+    html += `<span class="badge afeta" title="${esc(item.version_note)}">AFETA VOCÊ</span>`;
+  } else if (item.version_verdict === "nao_afeta") {
+    html += `<span class="badge safe" title="${esc(item.version_note)}">SUA VERSÃO OK</span>`;
+  }
+  if (item.epss != null && item.epss >= 0.1) {
+    html += `<span class="badge epss" title="Chance de exploração nos próximos 30 dias (EPSS)">EPSS ${Math.round(item.epss * 100)}%</span>`;
+  }
   if (item.affinity >= 65 && item.liked !== -1) {
     html += `<span class="badge like" title="Afinidade com o que você curtiu">♥ ${Math.round(item.affinity)}%</span>`;
   }
@@ -98,15 +106,34 @@ function badges(item) {
   return html;
 }
 
-function openExternal(url) {
-  api("/api/open", { method: "POST", body: { url } }).catch((e) => toast(e.message, true));
+async function openExternal(url, confirmed = false) {
+  let res;
+  try {
+    res = await api("/api/open", { method: "POST", body: { url, confirm: confirmed } });
+  } catch (e) {
+    toast(e.message, true);
+    return;
+  }
+  if (res.needs_confirm) {
+    const dialog = $("#link-dialog");
+    $("#link-host").textContent = res.display || res.host;
+    $("#link-reasons").innerHTML = res.reasons.map((r) => `<li>${esc(capitalize(r))}.</li>`).join("");
+    $("#link-url").textContent = url;
+    dialog.returnValue = "";
+    dialog.onclose = () => { if (dialog.returnValue === "open") openExternal(url, true); };
+    dialog.showModal();
+  }
+}
+
+function hostOf(url) {
+  try { return new URL(url).hostname.replace(/^www\./, ""); } catch (_) { return ""; }
 }
 
 // --- Navegação --------------------------------------------------------------
 
 function showPage(page) {
   state.page = page;
-  for (const id of ["reader", "fontes", "erros", "config"]) {
+  for (const id of ["reader", "fontes", "erros", "saude", "config"]) {
     $(`#page-${id}`).classList.toggle("hidden", id !== page);
   }
   $$(".nav-item").forEach((b) => {
@@ -115,6 +142,7 @@ function showPage(page) {
   if (page === "fontes") loadSources();
   if (page === "erros") loadErrors();
   if (page === "config") loadConfig();
+  if (page === "saude") loadHealth();
 }
 
 $$(".nav-item").forEach((btn) => {
@@ -140,6 +168,8 @@ async function loadItems() {
     unread: $("#unread-only").checked && state.view !== "favoritos" ? "1" : "0",
     days: $("#days").value,
     sort: $("#sort").value,
+    level: $("#level-filter").value,
+    source: $("#source-select").value,
   });
   try {
     if (state.view === "paravoce") state.prefs = await api("/api/preferences");
@@ -165,6 +195,12 @@ function renderList() {
   } else {
     list.innerHTML = "";
   }
+  const cveSearch = $("#search").value.trim().match(/^CVE-\d{4}-\d{4,7}$/i);
+  if (cveSearch) {
+    list.insertAdjacentHTML("afterbegin", `<div class="list-hint cve-hint" id="cve-hint">${icon("shield")}
+      <span>Ver tudo sobre <b>${esc(cveSearch[0].toUpperCase())}</b>: gravidade, chance de exploração, correção e linha do tempo.</span></div>`);
+    $("#cve-hint").onclick = () => { state.selectedId = null; showCve(cveSearch[0].toUpperCase()); };
+  }
   if (!state.items.length) {
     const hint = $("#unread-only").checked ? "Nada novo por aqui. Desmarque \"Só não lidas\" para ver tudo." :
       "Nenhuma notícia. Clique em \"Coletar agora\".";
@@ -180,9 +216,9 @@ function renderList() {
 }
 
 async function renderEmptyReader() {
-  let counts = {}, status = {};
+  let counts = {}, status = {}, healthInfo = {};
   try {
-    [counts, status] = await Promise.all([api("/api/counts"), api("/api/status")]);
+    [counts, status, healthInfo] = await Promise.all([api("/api/counts"), api("/api/status"), api("/api/health")]);
   } catch (_) { /* mostra o painel mesmo assim */ }
   if (state.selectedId !== null || state.page !== "reader") return;
   const run = status.last_run;
@@ -205,6 +241,7 @@ async function renderEmptyReader() {
       </div>
       ${run && run.sources_failed ? `<button class="notice" data-page-goto="erros">${icon("error")}
         <span><b>${run.sources_failed} fonte${run.sources_failed > 1 ? "s" : ""} com erro</b> na última coleta. Ver detalhes</span></button>` : ""}
+      ${healthNotices(healthInfo)}
       <p class="muted small shortcuts">Atalhos: <kbd>j</kbd>/<kbd>k</kbd> próxima/anterior · <kbd>s</kbd> favoritar ·
         <kbd>m</kbd> lida/não lida · <kbd>g</kbd> gostei · <kbd>n</kbd> não curti · <kbd>a</kbd> ler artigo · <kbd>o</kbd> abrir no navegador</p>
     </div>`;
@@ -236,7 +273,7 @@ function renderItem(item) {
   $("#read-pane").innerHTML = `
     <div class="read-toolbar">
       <button class="btn" id="act-article">${icon("book")}<span>Ler artigo aqui</span></button>
-      <button class="btn" id="act-open">${icon("external")}<span>Abrir no navegador</span></button>
+      <button class="btn" id="act-open" title="Abre ${esc(hostOf(item.url))} no navegador">${icon("external")}<span>Abrir <span class="host">${esc(hostOf(item.url))}</span></span></button>
       <span class="spacer"></span>
       <button class="btn like-btn ${item.liked === 1 ? "liked" : ""}" id="act-like" title="Gostei (g)">${icon("up")}<span>Gostei</span></button>
       <button class="btn like-btn ${item.liked === -1 ? "disliked" : ""}" id="act-dislike" title="Não curti (n)">${icon("down")}<span>Não curti</span></button>
@@ -246,9 +283,10 @@ function renderItem(item) {
     <article class="article">
       <div class="meta">${badges(item)}<span>${esc(item.source_name)}</span><span>·</span>
         <span title="${esc(fullDate(item.published))}">${esc(fullDate(item.published))}</span>
-        ${item.cvss != null ? `<span>· CVSS ${Number(item.cvss).toFixed(1)}</span>` : ""}</div>
+        ${item.cvss != null ? `<span>· CVSS ${Number(item.cvss).toFixed(1)}</span>` : ""}
+        ${item.epss != null && item.epss < 0.1 ? `<span title="Chance de exploração nos próximos 30 dias">· EPSS ${(item.epss * 100).toFixed(1)}%</span>` : ""}</div>
       <h1>${esc(item.title)}</h1>
-      ${cves.length ? `<div class="meta">${cves.map((c) => `<a class="cve" href="#" data-url="https://nvd.nist.gov/vuln/detail/${esc(c)}">${esc(c)}</a>`).join(" ")}</div>` : ""}
+      ${cves.length ? `<div class="meta">${cves.map((c) => `<a class="cve" href="#" data-cve="${esc(c)}" title="Tudo sobre ${esc(c)}">${esc(c)}</a>`).join(" ")}</div>` : ""}
       ${item.reasons ? `<div class="reasons lvl-${item.level}"><b>${levelLabel}</b><span>${esc(item.reasons)}</span></div>` : ""}
       ${item.affinity_terms && item.affinity_terms.length && item.liked !== -1 ? `<div class="affinity-note">${icon("sparkle")}
         <span>Parecida com o que você curtiu: ${item.affinity_terms.map(esc).join(", ")}</span></div>` : ""}
@@ -263,7 +301,7 @@ function renderItem(item) {
   $("#act-article").onclick = () => loadArticle(item);
   $("#act-like").onclick = () => setLike(item, item.liked === 1 ? 0 : 1);
   $("#act-dislike").onclick = () => setLike(item, item.liked === -1 ? 0 : -1);
-  $$(".cve[data-url]").forEach((a) => a.addEventListener("click", (ev) => { ev.preventDefault(); openExternal(a.dataset.url); }));
+  $$(".cve[data-cve]").forEach((a) => a.addEventListener("click", (ev) => { ev.preventDefault(); showCve(a.dataset.cve, item); }));
   $$(".related a").forEach((a) => a.addEventListener("click", () => selectItem(Number(a.dataset.id))));
   if (item.has_article) loadArticle(item);
 }
@@ -370,6 +408,25 @@ $("#search").addEventListener("input", () => { clearTimeout(searchTimer); search
 $("#unread-only").addEventListener("change", loadItems);
 $("#days").addEventListener("change", loadItems);
 $("#sort").addEventListener("change", loadItems);
+$("#level-filter").addEventListener("change", loadItems);
+$("#source-select").addEventListener("change", loadItems);
+
+async function fillSourceSelects() {
+  try {
+    const data = await api("/api/sources");
+    state.sources = data.sources;
+    state.streaks = data.streaks;
+    state.health = data.health;
+    state.silent = data.silent;
+  } catch (_) { return; }
+  const options = state.sources.map((s) => `<option value="${esc(s.id)}">${esc(s.name)}</option>`).join("");
+  for (const sel of ["#source-select", "#rule-source"]) {
+    const el = $(sel);
+    const keep = el.value;
+    el.innerHTML = el.firstElementChild.outerHTML + options;
+    el.value = keep;
+  }
+}
 $("#mark-all").addEventListener("click", async () => {
   const res = await api("/api/items/mark-all-read", { method: "POST", body: { view: state.view } });
   toast(`${res.marked} notícias marcadas como lidas.`);
@@ -458,6 +515,93 @@ async function pollStatus() {
 
 $("#collect-btn").addEventListener("click", () => startCollect());
 
+function healthNotices(h) {
+  if (!h || !h.schedule) return "";
+  let html = "";
+  if (h.schedule.missed) {
+    html += `<button class="notice warn" data-page-goto="saude">${icon("pulse")}<span><b>${esc(h.schedule.message)}</b>
+      ${esc(h.schedule.fix || "")}</span></button>`;
+  }
+  const findings = (h.selfcheck && h.selfcheck.findings) || [];
+  if (findings.length) {
+    const pkgs = [...new Set(findings.map((f) => f.package))].join(", ");
+    html += `<button class="notice" data-page-goto="saude">${icon("bug")}<span><b>As bibliotecas do programa têm
+      ${findings.length} falha${findings.length > 1 ? "s" : ""} conhecida${findings.length > 1 ? "s" : ""}</b> (${esc(pkgs)}). Ver como atualizar</span></button>`;
+  }
+  if (h.silent && h.silent.length) {
+    html += `<button class="notice warn" data-page-goto="erros">${icon("rss")}<span><b>${h.silent.length} fonte${h.silent.length > 1 ? "s" : ""}
+      sem nada novo há dias</b> (${esc(h.silent.map((s) => s.source_name).slice(0, 3).join(", "))}). Pode ser feed quebrado</span></button>`;
+  }
+  const badge = (h.schedule.missed ? 1 : 0) + (findings.length ? 1 : 0);
+  $("#health-count").textContent = badge || "";
+  return html;
+}
+
+// --- Página do CVE ----------------------------------------------------------
+
+async function showCve(cveId, fromItem = null) {
+  $("#read-pane").innerHTML = `<div class="article"><div class="article-loading">Buscando ${esc(cveId)} no NVD e no EPSS…</div></div>`;
+  let d;
+  try { d = await api(`/api/cve/${encodeURIComponent(cveId)}`); } catch (e) {
+    $("#read-pane").innerHTML = `<div class="article"><div class="article-loading">Não foi possível carregar: ${esc(e.message)}</div></div>`;
+    return;
+  }
+  const n = d.nvd;
+  const sev = n && n.cvss != null ? (n.cvss >= 9 ? "critico" : n.cvss >= 7 ? "alto" : "normal") : "normal";
+  const fact = (label, value, cls = "") => `<div class="fact ${cls}"><span class="fact-l">${label}</span><span class="fact-v">${value}</span></div>`;
+  const timeline = [];
+  if (n && n.published) timeline.push({ at: n.published, text: "Publicado no NVD" });
+  if (n && n.kev_added) timeline.push({ at: n.kev_added, text: "Entrou no catálogo de falhas exploradas (CISA KEV)", cls: "kev" });
+  if (n && n.kev_due) timeline.push({ at: n.kev_due, text: "Prazo da CISA para corrigir", cls: "kev" });
+  for (const item of d.news) timeline.push({ at: (item.published || item.fetched_at).replace(" ", "T") + "Z", text: `${item.source_name}: ${item.title}`, id: item.id });
+  timeline.sort((a, b) => new Date(a.at) - new Date(b.at));
+  const tags = (r) => r.tags.length ? ` <span class="muted small">(${esc(r.tags.join(", "))})</span>` : "";
+  const keyRefs = n ? n.references.filter((r) => r.tags.some((t) => ["Patch", "Exploit", "Vendor Advisory", "Mitigation"].includes(t))) : [];
+  const otherRefs = n ? n.references.filter((r) => !keyRefs.includes(r)).slice(0, 8) : [];
+  const ranges = n ? n.ranges.slice(0, 12).map((r) => {
+    const parts = [];
+    if (r.start_incl) parts.push(`a partir de ${r.start_incl}`);
+    if (r.start_excl) parts.push(`depois de ${r.start_excl}`);
+    if (r.end_incl) parts.push(`até ${r.end_incl}`);
+    if (r.end_excl) parts.push(`antes de ${r.end_excl}`);
+    const version = r.version && !["*", "-"].includes(r.version) ? r.version : (parts.join(", ") || "todas as versões");
+    return `<li><code>${esc(r.product)}</code> ${esc(version)}</li>`;
+  }).join("") : "";
+  $("#read-pane").innerHTML = `
+    <div class="read-toolbar">
+      ${fromItem ? `<button class="btn" id="cve-back">← Voltar à notícia</button>` : ""}
+      <button class="btn" id="cve-nvd">${icon("external")}<span>Abrir no NVD</span></button>
+      <span class="spacer"></span>
+    </div>
+    <article class="article cve-page">
+      <div class="meta"><span class="badge ${sev}">${n && n.severity ? esc(n.severity) : "CVE"}</span>
+        ${d.kev ? '<span class="badge kev">EXPLORADA</span>' : ""}
+        ${d.verdict === "afeta" ? '<span class="badge afeta">AFETA VOCÊ</span>' : d.verdict === "nao_afeta" ? '<span class="badge safe">SUA VERSÃO OK</span>' : ""}</div>
+      <h1>${esc(d.id)}${n && n.kev_name ? `: ${esc(n.kev_name)}` : ""}</h1>
+      <div class="facts">
+        ${fact("CVSS", n && n.cvss != null ? n.cvss.toFixed(1) : "—", sev)}
+        ${fact("Chance de exploração (30 dias)", d.epss != null ? `${(d.epss * 100).toFixed(d.epss < 0.1 ? 1 : 0)}%` : "—", d.epss >= 0.5 ? "critico" : d.epss >= 0.1 ? "alto" : "")}
+        ${fact("Explorada ativamente", d.kev ? "Sim (CISA KEV)" : "Não consta", d.kev ? "critico" : "")}
+        ${fact("Correção publicada", n ? (n.has_patch ? "Sim" : "Não indicada") : "—", n && n.has_patch ? "ok" : "")}
+        ${fact("Exploit público", n ? (n.has_exploit ? "Sim" : "Não indicado") : "—", n && n.has_exploit ? "critico" : "")}
+      </div>
+      ${d.verdict ? `<div class="reasons lvl-${d.verdict === "afeta" ? "critico" : "normal"}"><b>${d.verdict === "afeta" ? "Sua versão é afetada" : "Sua versão não aparece como afetada"}</b><span>${esc(d.verdict_note)}</span></div>` : ""}
+      ${n && n.kev_action ? `<div class="reasons lvl-alto"><b>Ação recomendada pela CISA</b><span>${esc(n.kev_action)}</span></div>` : ""}
+      ${n ? `<div class="summary">${esc(n.description)}</div>` : `<p class="muted">${esc(d.nvd_error || "O NVD ainda não tem detalhes deste CVE.")}</p>`}
+      ${n && n.weaknesses.length ? `<p class="muted small">Tipo de falha: ${n.weaknesses.map(esc).join(", ")} · Vetor: <code>${esc(n.vector)}</code></p>` : ""}
+      ${ranges ? `<h3>Versões afetadas</h3><ul class="ranges">${ranges}</ul>` : ""}
+      <h3>Linha do tempo</h3>
+      <ol class="timeline">${timeline.map((t) => `<li class="${t.cls || ""}"><span class="when">${esc(new Date(t.at).toLocaleDateString("pt-BR"))}</span>
+        ${t.id ? `<a data-id="${t.id}">${esc(t.text)}</a>` : `<span>${esc(t.text)}</span>`}</li>`).join("")}</ol>
+      ${keyRefs.length ? `<h3>Correções e avisos</h3><ul class="refs">${keyRefs.map((r) => `<li><a href="#" data-url="${esc(r.url)}">${esc(hostOf(r.url))}</a>${tags(r)}</li>`).join("")}</ul>` : ""}
+      ${otherRefs.length ? `<h3>Outras referências</h3><ul class="refs">${otherRefs.map((r) => `<li><a href="#" data-url="${esc(r.url)}">${esc(hostOf(r.url))}</a>${tags(r)}</li>`).join("")}</ul>` : ""}
+    </article>`;
+  if (fromItem) $("#cve-back").onclick = () => renderItem(fromItem);
+  $("#cve-nvd").onclick = () => openExternal(`https://nvd.nist.gov/vuln/detail/${d.id}`);
+  $$(".timeline a[data-id]").forEach((a) => a.onclick = () => selectItem(Number(a.dataset.id)));
+  $$(".refs a[data-url]").forEach((a) => a.onclick = (ev) => { ev.preventDefault(); openExternal(a.dataset.url); });
+}
+
 // --- Fontes -----------------------------------------------------------------
 
 const TYPE_LABELS = { rss: "RSS", scrape: "Raspagem", cisa_kev: "CISA KEV", nvd: "NVD", github_advisories: "GitHub" };
@@ -468,6 +612,8 @@ async function loadSources() {
     const data = await api("/api/sources");
     state.sources = data.sources;
     state.streaks = data.streaks;
+    state.health = data.health;
+    state.silent = data.silent;
   } catch (e) {
     toast(e.message, true);
     return;
@@ -480,15 +626,22 @@ function renderSources() {
   const rows = state.sources.filter((s) => !filter || `${s.name} ${s.url}`.toLowerCase().includes(filter));
   $("#sources-table tbody").innerHTML = rows.map((s) => {
     const streak = state.streaks[s.id] || 0;
+    const silent = (state.silent || []).includes(s.id);
     const statusHtml = !s.enabled ? '<span class="muted">Desativada</span>' :
       streak ? `<span class="status-bad">Falhou ${streak}x seguida${streak > 1 ? "s" : ""}</span>` :
+      silent ? '<span class="status-warn" title="Responde, mas não traz nada novo há dias">● Silenciosa</span>' :
       '<span class="status-ok">● OK</span>';
+    const h = (state.health || {})[s.id];
+    const healthHtml = !h || !h.runs ? '<span class="muted small">sem dados</span>' :
+      `<div class="health-cell"><span class="${h.success_rate >= 90 ? "status-ok" : h.success_rate >= 60 ? "status-warn" : "status-bad"}">${h.success_rate}% OK</span>
+       <span class="muted small">${h.median_ms != null ? (h.median_ms / 1000).toFixed(1) + " s · " : ""}${h.per_day}/dia${h.likes ? ` · ♥ ${h.likes}` : ""}</span></div>`;
     return `<tr class="${s.enabled ? "" : "disabled"}" data-id="${esc(s.id)}">
       <td><label class="switch"><input type="checkbox" class="toggle" ${s.enabled ? "checked" : ""}><span></span></label></td>
       <td><b>${esc(s.name)}</b><div class="url">${esc(s.url)}</div></td>
       <td><span class="pill">${esc(TYPE_LABELS[s.type] || s.type)}</span></td>
       <td>${esc(CATEGORY_LABELS[s.category] || s.category)}</td>
       <td>${statusHtml}</td>
+      <td>${healthHtml}</td>
       <td class="row-actions">
         <button class="btn small test">Testar</button>
         <button class="btn small edit">Editar</button>
@@ -657,6 +810,19 @@ async function loadErrors() {
       if (source) openSourceDialog(source); else toast("Essa fonte não existe mais.", true);
     });
   }
+  const silentBox = $("#errors-silent");
+  silentBox.innerHTML = data.silent.length ? `<h2>Fontes silenciosas</h2>
+    <p class="muted small">Respondem normalmente, mas não trazem nada novo há dias. Costuma ser feed que mudou de endereço.</p>` +
+    data.silent.map((s) => `<div class="error-card warn" data-id="${esc(s.source_id)}">
+      <div><b>${esc(s.source_name)}</b>
+        <div class="msg">${s.days != null ? `Nada novo há ${s.days} dias` : "Nunca trouxe notícia nova"} (limite: ${s.limit} dias).</div>
+        <div class="muted small">${esc(s.url || "")}</div></div>
+      <div><button class="btn small edit">Revisar fonte</button></div></div>`).join("") : "";
+  $$(".error-card.warn .edit", silentBox).forEach((btn) => btn.onclick = async () => {
+    if (!state.sources.length) await loadSources();
+    const source = state.sources.find((s) => s.id === btn.closest(".error-card").dataset.id);
+    if (source) openSourceDialog(source);
+  });
   $("#errors-history tbody").innerHTML = data.history.map((e) =>
     `<tr><td class="small">${esc(fullDate(e.at))}</td><td>${esc(e.source_name)}</td><td class="small">${esc(e.error)}</td></tr>`
   ).join("") || '<tr><td colspan="3" class="muted">Nenhum erro registrado.</td></tr>';
@@ -683,7 +849,12 @@ async function loadConfig() {
     else if (el.dataset.list === "lines") el.value = (value || []).join("\n");
     else el.value = value ?? "";
   }
+  if (!state.sources.length) await fillSourceSelects();
   renderTechs();
+  renderVersions();
+  renderRules();
+  renderChat();
+  renderAuth();
   loadPreferences();
   $("#password-status").textContent = "Verificando senha…";
   api("/api/email/password").then((pw) => {
@@ -748,10 +919,11 @@ function configFromForm() {
 
 async function saveConfig(quiet = false) {
   const cfg = configFromForm();
-  await api("/api/config", { method: "PUT", body: { config: cfg } });
+  cfg.interests.versions = (cfg.interests.versions || []).filter((v) => v.cpe && v.version);
+  const res = await api("/api/config", { method: "PUT", body: { config: cfg } });
   state.config = cfg;
   document.documentElement.dataset.theme = cfg.appearance.theme;
-  if (!quiet) toast("Configurações salvas.");
+  if (!quiet) toast(res.rescored ? `Configurações salvas. Prioridade de ${res.rescored} notícias recalculada.` : "Configurações salvas.");
 }
 
 $("#save-config").addEventListener("click", () => saveConfig().catch((e) => toast(e.message, true)));
@@ -798,9 +970,355 @@ $("#email-preview").addEventListener("click", () => {
   window.open(`/email/preview?t=${encodeURIComponent(TOKEN)}&all=1`, "_blank", "width=720,height=900");
 });
 
+// --- Saúde do programa --------------------------------------------------------
+
+const CHECK_LABEL = { ok: "OK", aviso: "Atenção", erro: "Erro" };
+
+function renderChecks(checks) {
+  $("#diag-list").innerHTML = checks.map((c) => `<div class="check-row ${c.status}">
+    <span class="check-pill ${c.status}">${CHECK_LABEL[c.status]}</span>
+    <div><b>${esc(c.name)}</b> <span class="muted">${esc(c.detail)}</span>
+      ${c.fix && c.status !== "ok" ? `<div class="small fix">Como corrigir: ${esc(c.fix)}</div>` : ""}</div></div>`).join("");
+}
+
+async function loadHealth() {
+  let h;
+  try { h = await api("/api/health"); } catch (e) { toast(e.message, true); return; }
+  state.healthInfo = h;
+  $("#health-sub").textContent = `Versão ${h.version} · dados em ${h.data_dir}`;
+  const report = h.selfcheck;
+  const box = $("#selfcheck-box");
+  if (!report) box.innerHTML = '<p class="muted small">Ainda não conferido. Clique em "Conferir agora" ou faça uma coleta.</p>';
+  else if (!report.findings.length) box.innerHTML = `<div class="ok-card">${report.packages} bibliotecas conferidas em ${esc(new Date(report.checked_at).toLocaleString("pt-BR"))}: nenhuma falha conhecida.</div>`;
+  else box.innerHTML = report.findings.map((f) => `<div class="error-card"><div>
+      <b>${esc(f.package)} ${esc(f.version)}</b> · <a href="#" data-url="${esc(f.url)}">${esc(f.id)}</a>${f.aliases.length ? ` <span class="muted small">(${esc(f.aliases.join(", "))})</span>` : ""}
+      <div class="msg">${esc(f.summary || "Falha conhecida.")}</div>
+      <div class="small">${f.fixed.length ? `Corrigida na versão <b>${esc(f.fixed.join(", "))}</b>.` : "Sem versão corrigida informada."}</div></div></div>`).join("") +
+    `<p class="small">Para corrigir: baixe a versão mais nova do programa (abaixo) ou, rodando pelo Python, <code>pip install -U ${esc([...new Set(report.findings.map((f) => f.package))].join(" "))}</code>.</p>`;
+  $$("#selfcheck-box a[data-url]").forEach((a) => a.onclick = (ev) => { ev.preventDefault(); openExternal(a.dataset.url); });
+
+  const sched = h.schedule;
+  $("#sched-time").value = sched.time;
+  $("#sched-status").className = "small " + (sched.missed ? "status-bad" : sched.installed ? "status-ok" : "muted");
+  $("#sched-status").textContent = sched.message + (sched.fix ? " " + sched.fix : "");
+  $("#sched-remove").classList.toggle("hidden", !sched.installed);
+  $("#resident-status").className = "small " + (h.resident ? "status-ok" : "muted");
+  $("#resident-status").textContent = h.resident ? "Os alertas iniciam junto com o sistema." : "Os alertas não iniciam sozinhos.";
+  $("#resident-on").classList.toggle("hidden", h.resident);
+  $("#resident-off").classList.toggle("hidden", !h.resident);
+  $("#db-status").textContent = `${h.db.items} notícias (${h.db.starred} favoritas, ${h.db.rated} avaliadas) · ` +
+    `${(h.db.bytes / 1048576).toFixed(1)} MB` + (h.cleanup_at ? ` · última faxina ${new Date(h.cleanup_at).toLocaleString("pt-BR")}` : "");
+  if (state.config) {
+    const sc = state.config.schedule || {};
+    $("#sched-weekdays").checked = sc.weekdays_only !== false;
+    $("#sched-email").checked = sc.send_email !== false;
+    $("#sched-alert").checked = sc.alert_missed !== false;
+  } else {
+    api("/api/config").then((d) => { state.config = d.config; loadHealth(); }).catch(() => {});
+  }
+  if (!state.checks) {
+    api("/api/diagnostics", { method: "POST", body: { quick: true } }).then((d) => renderChecks(d.checks)).catch(() => {});
+  }
+}
+
+$("#diag-run").addEventListener("click", async (ev) => {
+  const btn = ev.currentTarget;
+  btn.disabled = true;
+  $("#diag-list").innerHTML = '<p class="muted small">Rodando diagnóstico completo (internet, relógio, e-mail)…</p>';
+  try {
+    const d = await api("/api/diagnostics", { method: "POST", body: {} });
+    state.checks = d.checks;
+    renderChecks(d.checks);
+  } catch (e) { toast(e.message, true); }
+  btn.disabled = false;
+});
+
+$("#selfcheck-run").addEventListener("click", async (ev) => {
+  ev.currentTarget.disabled = true;
+  try { await api("/api/selfcheck", { method: "POST" }); await loadHealth(); toast("Bibliotecas conferidas."); }
+  catch (e) { toast(e.message, true); }
+  ev.target.disabled = false;
+});
+
+async function scheduleAction(body) {
+  try {
+    const res = await api("/api/schedule", { method: "POST", body });
+    toast(res.message);
+    state.config = null;
+    loadHealth();
+  } catch (e) { toast(e.message, true); }
+}
+$("#sched-install").addEventListener("click", () => scheduleAction({
+  time: $("#sched-time").value || "07:00", weekdays_only: $("#sched-weekdays").checked,
+  send_email: $("#sched-email").checked, alert_missed: $("#sched-alert").checked,
+}));
+$("#sched-remove").addEventListener("click", () => scheduleAction({ action: "remove" }));
+$("#resident-on").addEventListener("click", () => scheduleAction({ action: "resident_on" }));
+$("#resident-off").addEventListener("click", () => scheduleAction({ action: "resident_off" }));
+
+$("#cleanup-run").addEventListener("click", async () => {
+  try {
+    const r = await api("/api/maintenance", { method: "POST" });
+    toast(`Faxina feita: ${r.items} notícias antigas apagadas, ${(r.freed_bytes / 1048576).toFixed(1)} MB liberados.`);
+    loadHealth();
+  } catch (e) { toast(e.message, true); }
+});
+
+$$("[data-folder]").forEach((b) => b.addEventListener("click", () =>
+  api("/api/open-folder", { method: "POST", body: { folder: b.dataset.folder } }).catch((e) => toast(e.message, true))));
+
+$("#update-check").addEventListener("click", async () => {
+  const status = $("#update-status");
+  status.textContent = "Consultando o GitHub…";
+  try {
+    const u = await api("/api/updates/check", { method: "POST" });
+    if (!u.newer) {
+      status.className = "small status-ok";
+      status.textContent = `Você está na versão mais recente (${u.current}).`;
+      return;
+    }
+    status.className = "small";
+    status.innerHTML = `Versão <b>${esc(u.latest)}</b> disponível (você tem ${esc(u.current)}).` +
+      (u.frozen ? "" : " Como você roda pelo código-fonte, atualize com <code>git pull</code>.");
+    $("#update-download").classList.toggle("hidden", !(u.frozen && u.has_package));
+  } catch (e) { status.className = "small status-bad"; status.textContent = e.message; }
+});
+$("#update-download").addEventListener("click", async (ev) => {
+  const status = $("#update-status");
+  ev.currentTarget.disabled = true;
+  status.textContent = "Baixando e conferindo o hash…";
+  try {
+    const r = await api("/api/updates/download", { method: "POST" });
+    status.className = "small status-ok";
+    status.innerHTML = `Pacote da versão ${esc(r.version)} baixado e conferido (SHA-256 ${esc(r.sha256.slice(0, 16))}…).
+      Feche o programa e extraia <code>${esc(r.path)}</code> por cima da pasta atual.`;
+    $("#update-folder").classList.remove("hidden");
+  } catch (e) { status.className = "small status-bad"; status.textContent = e.message; }
+  ev.target.disabled = false;
+});
+
+$("#report-copy").addEventListener("click", async () => {
+  const area = $("#report-text");
+  let text;
+  try { text = (await api("/api/report")).text; } catch (e) { toast(e.message, true); return; }
+  area.value = text;
+  area.classList.remove("hidden");
+  try {
+    await navigator.clipboard.writeText(text);
+    toast("Relatório copiado.");
+  } catch (_) {
+    area.select();
+    document.execCommand("copy");
+    toast("Relatório selecionado. Se não copiou, use Ctrl+C.");
+  }
+});
+
+// --- Versões, filtros, celular, login Microsoft e backup ------------------------
+
+const VERSION_PRESETS = {
+  "PHP": "php:php", "MariaDB": "mariadb:mariadb", "MySQL": "oracle:mysql", "Laravel": "laravel:framework",
+  "Node.js": "nodejs:node.js", "nginx": "f5:nginx", "Apache HTTP Server": "apache:http_server",
+  "OpenSSL": "openssl:openssl", "PostgreSQL": "postgresql:postgresql", "WordPress": "wordpress:wordpress",
+  "Redis": "redis:redis", "Composer": "getcomposer:composer",
+};
+$("#version-preset").insertAdjacentHTML("beforeend",
+  Object.keys(VERSION_PRESETS).map((k) => `<option>${esc(k)}</option>`).join("") + '<option value="__outro">Outro…</option>');
+
+function renderVersions() {
+  const list = state.config.interests.versions = state.config.interests.versions || [];
+  $("#versions-table tbody").innerHTML = list.map((v, i) => `<tr data-i="${i}">
+    <td><input class="v-name" value="${esc(v.name || "")}"></td>
+    <td><input class="v-cpe mono" value="${esc(v.cpe || "")}" placeholder="fornecedor:produto"></td>
+    <td><input class="v-version" value="${esc(v.version || "")}" placeholder="8.2.10"></td>
+    <td><button class="btn small ghost danger">Remover</button></td></tr>`).join("") ||
+    '<tr><td colspan="4" class="muted small">Nenhuma versão cadastrada.</td></tr>';
+  $$("#versions-table tbody tr[data-i]").forEach((tr) => {
+    const v = list[Number(tr.dataset.i)];
+    $(".v-name", tr).oninput = (ev) => { v.name = ev.target.value.trim(); };
+    $(".v-cpe", tr).oninput = (ev) => { v.cpe = ev.target.value.trim().toLowerCase(); };
+    $(".v-version", tr).oninput = (ev) => { v.version = ev.target.value.trim(); };
+    $("button", tr).onclick = () => { list.splice(Number(tr.dataset.i), 1); renderVersions(); };
+  });
+}
+$("#version-add").addEventListener("click", () => {
+  const choice = $("#version-preset").value;
+  if (!choice) return;
+  const list = state.config.interests.versions = state.config.interests.versions || [];
+  list.push(choice === "__outro" ? { name: "", cpe: "", version: "" } : { name: choice, cpe: VERSION_PRESETS[choice], version: "" });
+  renderVersions();
+  $("#versions-table tbody tr:last-child .v-version")?.focus();
+});
+
+const ACTION_LABELS = { mute: "Silenciar", highlight: "Destacar" };
+function renderRules() {
+  const filters = state.config.filters = state.config.filters || {};
+  const rules = filters.rules = filters.rules || [];
+  const sourceName = (id) => (state.sources.find((s) => s.id === id) || {}).name || id;
+  $("#rules-table tbody").innerHTML = rules.map((r, i) => `<tr>
+    <td>${esc(r.term)}</td><td><span class="pill ${r.action}">${ACTION_LABELS[r.action] || r.action}</span></td>
+    <td>${r.source ? esc(sourceName(r.source)) : '<span class="muted">Todas</span>'}</td>
+    <td><button class="btn small ghost danger" data-i="${i}">Remover</button></td></tr>`).join("") ||
+    '<tr><td colspan="4" class="muted small">Nenhuma regra.</td></tr>';
+  $$("#rules-table button[data-i]").forEach((b) => b.onclick = () => { rules.splice(Number(b.dataset.i), 1); renderRules(); });
+}
+$("#rule-add").addEventListener("click", () => {
+  const term = $("#rule-term").value.trim();
+  if (!term) return;
+  state.config.filters.rules.push({ term, action: $("#rule-action").value, source: $("#rule-source").value });
+  $("#rule-term").value = "";
+  renderRules();
+});
+$("#see-muted").addEventListener("click", (ev) => {
+  ev.preventDefault();
+  state.view = "silenciadas";
+  state.selectedId = null;
+  showPage("reader");
+  $("#unread-only").checked = false;
+  loadItems();
+  renderEmptyReader();
+});
+
+const CHAT_HELP = {
+  telegram: ["Token do robô", "123456:ABC…", "No Telegram, fale com @BotFather, envie /newbot e copie o token. Depois mande um \"oi\" para o seu robô e clique em Descobrir."],
+  discord: ["Endereço do webhook", "https://discord.com/api/webhooks/…", "No Discord: Configurações do canal → Integrações → Webhooks → Novo webhook → Copiar URL."],
+  teams: ["Endereço do webhook", "https://….logic.azure.com/…", "No Teams: no canal, ··· → Fluxos de trabalho → \"Postar em um canal quando uma solicitação de webhook for recebida\" e copie o endereço."],
+};
+async function renderChat() {
+  const provider = $("#chat-provider").value;
+  const [label, placeholder, help] = CHAT_HELP[provider];
+  $("#chat-secret-label").firstChild.textContent = label + " ";
+  $("#chat-secret").placeholder = placeholder;
+  $("#chat-help").textContent = help;
+  $("#chat-id-label").classList.toggle("hidden", provider !== "telegram");
+  try {
+    const st = await api("/api/chat/status");
+    $("#chat-secret-status").textContent = st[provider] ? "Salvo no cofre." : "Nada salvo ainda.";
+  } catch (_) { /* silencioso */ }
+}
+$("#chat-provider").addEventListener("change", renderChat);
+$("#chat-secret-save").addEventListener("click", async () => {
+  const value = $("#chat-secret").value.trim();
+  if (!value) return toast("Cole o token ou o endereço.", true);
+  try {
+    await api("/api/chat/secret", { method: "POST", body: { provider: $("#chat-provider").value, value } });
+    $("#chat-secret").value = "";
+    toast("Salvo no cofre do sistema.");
+    renderChat();
+  } catch (e) { toast(e.message, true); }
+});
+$("#chat-discover").addEventListener("click", async () => {
+  try {
+    const r = await api("/api/chat/discover", { method: "POST" });
+    $('[name="chat.telegram_chat_id"]').value = r.chat_id;
+    toast(`Chat encontrado: ${r.name || r.chat_id}. Clique em Salvar configurações.`);
+  } catch (e) { toast(e.message, true); }
+});
+$("#chat-test").addEventListener("click", async () => {
+  const status = $("#chat-status");
+  status.className = "small muted";
+  status.textContent = "Enviando…";
+  try {
+    await saveConfig(true);
+    await api("/api/chat/test", { method: "POST" });
+    status.className = "small status-ok";
+    status.textContent = "Mensagem de teste enviada.";
+  } catch (e) { status.className = "small status-bad"; status.textContent = e.message; }
+});
+
+function renderAuth() {
+  const oauthMode = $("#email-auth").value === "oauth_microsoft";
+  $("#auth-password").classList.toggle("hidden", oauthMode);
+  $("#auth-oauth").classList.toggle("hidden", !oauthMode);
+  if (oauthMode) refreshOauth();
+}
+$("#email-auth").addEventListener("change", renderAuth);
+
+let oauthTimer;
+async function refreshOauth() {
+  clearTimeout(oauthTimer);
+  let st;
+  try { st = await api("/api/email/oauth/status"); } catch (_) { return; }
+  const box = $("#oauth-code");
+  const status = $("#oauth-status");
+  if (st.status === "pending") {
+    box.classList.remove("hidden");
+    box.innerHTML = `Abra <a href="#" data-url="${esc(st.url)}">${esc(st.url)}</a> e digite o código <b class="mono">${esc(st.user_code)}</b>`;
+    $("a", box).onclick = (ev) => { ev.preventDefault(); openExternal(st.url); };
+    status.className = "small muted";
+    status.textContent = "Aguardando você autorizar…";
+    oauthTimer = setTimeout(refreshOauth, 3000);
+    return;
+  }
+  box.classList.add("hidden");
+  if (st.status === "error") { status.className = "small status-bad"; status.textContent = st.message; return; }
+  status.className = "small " + (st.connected ? "status-ok" : "muted");
+  status.textContent = st.connected ? "Conta Microsoft conectada." : "Não conectada.";
+}
+$("#oauth-connect").addEventListener("click", async () => {
+  try {
+    await saveConfig(true);
+    await api("/api/email/oauth/start", { method: "POST" });
+    refreshOauth();
+  } catch (e) { toast(e.message, true); }
+});
+$("#oauth-disconnect").addEventListener("click", async () => {
+  await api("/api/email/oauth/disconnect", { method: "POST" });
+  refreshOauth();
+});
+
+function downloadText(filename, text, type) {
+  const url = URL.createObjectURL(new Blob([text], { type }));
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 2000);
+}
+function readFile(input) {
+  return new Promise((resolve, reject) => {
+    const file = input.files[0];
+    if (!file) return reject(new Error("Nenhum arquivo escolhido."));
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = () => reject(new Error("Não foi possível ler o arquivo."));
+    reader.readAsText(file, "utf-8");
+  });
+}
+$("#backup-export").addEventListener("click", async () => {
+  try {
+    const r = await api("/api/backup/export", { method: "POST" });
+    downloadText(r.path.split(/[\\/]/).pop(), JSON.stringify(r.data, null, 1), "application/json");
+    $("#backup-status").className = "small status-ok";
+    $("#backup-status").textContent = `Backup salvo também em ${r.path}`;
+  } catch (e) { toast(e.message, true); }
+});
+$("#backup-import").addEventListener("change", async (ev) => {
+  try {
+    const data = JSON.parse(await readFile(ev.target));
+    const r = await api("/api/backup/import", { method: "POST", body: { backup: data } });
+    toast(`Importado: ${r.sources} fontes novas, ${r.items} notícias avaliadas/favoritas${r.config ? ", configurações" : ""}.`);
+    loadConfig();
+  } catch (e) { toast(e.message, true); }
+  ev.target.value = "";
+});
+$("#opml-export").addEventListener("click", async () => {
+  try { downloadText("monitor-fontes.opml", (await api("/api/opml")).opml, "text/x-opml"); }
+  catch (e) { toast(e.message, true); }
+});
+$("#opml-import").addEventListener("change", async (ev) => {
+  try {
+    const r = await api("/api/opml", { method: "POST", body: { opml: await readFile(ev.target) } });
+    toast(`${r.added} fontes adicionadas${r.skipped ? `, ${r.skipped} já existiam` : ""}.`);
+  } catch (e) { toast(e.message, true); }
+  ev.target.value = "";
+});
+
 // --- Início -----------------------------------------------------------------
 
 loadItems();
 renderEmptyReader();
 pollStatus();
+fillSourceSelects();
 setInterval(() => { if (state.page === "reader") loadCounts(); }, 60000);

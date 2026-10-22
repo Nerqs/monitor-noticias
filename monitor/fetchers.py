@@ -15,12 +15,15 @@ import calendar
 import hashlib
 import html
 import re
+import time
 from datetime import datetime, timedelta, timezone
 from urllib.parse import urljoin
 
 import feedparser
 import httpx
 from bs4 import BeautifulSoup
+
+from . import netguard
 
 USER_AGENT = "Mozilla/5.0 (compatible; MonitorNoticias/1.0; +https://github.com/Nerqs/monitor-noticias)"
 CVE_RE = re.compile(r"\bCVE-\d{4}-\d{4,7}\b", re.IGNORECASE)
@@ -32,23 +35,97 @@ class FetchError(Exception):
 
 # --- Utilidades -----------------------------------------------------------
 
-def make_client(timeout: float = 20) -> httpx.Client:
-    return httpx.Client(
+MAX_DOWNLOAD_MB = 10
+RETRY_DELAYS = (2, 5)  # segundos de espera antes da 2ª e da 3ª tentativa
+RETRY_STATUS = {429, 500, 502, 503, 504}
+
+
+class NotModified(Exception):
+    """O site respondeu 304: nada mudou desde a última coleta."""
+
+
+def _guard_request(request: httpx.Request) -> None:
+    try:
+        netguard.check_url(str(request.url))
+    except netguard.BlockedAddress as exc:
+        raise FetchError(str(exc))
+
+
+def make_client(timeout: float = 20, allow_private: bool = False,
+                max_mb: float = MAX_DOWNLOAD_MB, retries: bool = True,
+                transport: httpx.BaseTransport | None = None) -> httpx.Client:
+    """Cliente HTTP da coleta.
+
+    Cada requisição (inclusive cada redirecionamento) passa pelo ``netguard``,
+    a não ser que ``allow_private`` libere a rede interna.
+    """
+    client = httpx.Client(
         timeout=timeout,
         follow_redirects=True,
+        max_redirects=8,
         headers={"User-Agent": USER_AGENT, "Accept-Language": "pt-BR,pt;q=0.9,en;q=0.8"},
+        event_hooks={"request": [] if allow_private else [_guard_request]},
+        transport=transport,
     )
+    client.max_bytes = int(max_mb * 1024 * 1024)
+    client.retries = retries
+    return client
 
 
-def http_get(client: httpx.Client, url: str, **kwargs) -> httpx.Response:
-    try:
-        response = client.get(url, **kwargs)
-    except httpx.TimeoutException:
-        raise FetchError("Tempo esgotado: o site demorou demais para responder.")
-    except httpx.ConnectError as exc:
-        raise FetchError(f"Não foi possível conectar ao site ({exc}).")
-    except httpx.HTTPError as exc:
-        raise FetchError(f"Erro de rede: {exc}")
+def _download(client: httpx.Client, url: str, **kwargs) -> httpx.Response:
+    """GET com limite de tamanho: corta respostas gigantes antes de lê-las inteiras."""
+    limit = getattr(client, "max_bytes", MAX_DOWNLOAD_MB * 1024 * 1024)
+    with client.stream("GET", url, **kwargs) as response:
+        declared = response.headers.get("content-length", "")
+        if declared.isdigit() and int(declared) > limit:
+            raise FetchError(f"Resposta grande demais ({int(declared) // 1048576} MB; limite {limit // 1048576} MB).")
+        chunks, size = [], 0
+        for chunk in response.iter_bytes():
+            size += len(chunk)
+            if size > limit:
+                raise FetchError(f"Resposta grande demais (mais de {limit // 1048576} MB). Download interrompido.")
+            chunks.append(chunk)
+        # Já descompactado por iter_bytes; guardado como conteúdo da resposta.
+        response._content = b"".join(chunks)
+    return response
+
+
+def http_get(client: httpx.Client, url: str, cache=None, **kwargs) -> httpx.Response:
+    """GET com limite de tamanho, novas tentativas e cache condicional opcional.
+
+    ``cache`` (``db.HttpCache``) guarda ETag/Last-Modified; quando o site responde
+    304, levanta ``NotModified``.
+    """
+    headers = dict(kwargs.pop("headers", None) or {})
+    if cache is not None:
+        headers.update(cache.conditional_headers(url))
+    attempts = 1 + (len(RETRY_DELAYS) if getattr(client, "retries", True) else 0)
+    for attempt in range(attempts):
+        retry_after = None
+        try:
+            response = _download(client, url, headers=headers, **kwargs)
+        except httpx.TimeoutException:
+            error = FetchError("Tempo esgotado: o site demorou demais para responder.")
+        except httpx.ConnectError as exc:
+            error = FetchError(f"Não foi possível conectar ao site ({exc}).")
+        except httpx.TooManyRedirects:
+            raise FetchError("Redirecionamentos demais: o endereço fica mandando para outro lugar.")
+        except httpx.HTTPError as exc:
+            error = FetchError(f"Erro de rede: {exc}")
+        else:
+            if response.status_code not in RETRY_STATUS:
+                break
+            error = None
+            header = response.headers.get("retry-after", "")
+            retry_after = min(int(header), 30) if header.isdigit() else None
+        if attempt == attempts - 1:
+            if error:
+                raise error
+            break
+        time.sleep(retry_after if retry_after is not None else RETRY_DELAYS[attempt])
+
+    if response.status_code == 304:
+        raise NotModified()
     if response.status_code >= 400:
         hints = {
             403: "acesso negado; o site pode estar bloqueando robôs",
@@ -57,7 +134,16 @@ def http_get(client: httpx.Client, url: str, **kwargs) -> httpx.Response:
         }
         hint = hints.get(response.status_code) or ("erro no servidor do site" if response.status_code >= 500 else "")
         raise FetchError(f"HTTP {response.status_code}" + (f": {hint}." if hint else "."))
+    if cache is not None:
+        cache.store(url, response.headers.get("etag"), response.headers.get("last-modified"))
     return response
+
+
+def check_xml_safety(content: bytes) -> None:
+    """Recusa XML com declarações de entidade (base de ataques como "billion laughs")."""
+    head = content[:65536].lower()
+    if b"<!entity" in head:
+        raise FetchError("O feed declara entidades XML (<!ENTITY>), recurso usado em ataques. Feed ignorado.")
 
 
 def clean_text(value: str | None, limit: int = 600) -> str:
@@ -106,9 +192,12 @@ def normalize_url(url: str) -> str:
 # --- RSS / Atom -----------------------------------------------------------
 
 def fetch_rss(source: dict, client: httpx.Client, settings: dict) -> list[dict]:
-    response = http_get(client, source["url"])
+    response = http_get(client, source["url"], cache=settings.get("http_cache"))
+    check_xml_safety(response.content)
     feed = feedparser.parse(response.content)
     if not feed.entries:
+        if "html" in response.headers.get("content-type", "") and b"<rss" not in response.content[:2000]:
+            raise FetchError("O endereço devolveu uma página HTML, não um feed. O feed pode ter mudado de lugar.")
         if feed.bozo:
             raise FetchError(f"O conteúdo não é um feed RSS/Atom válido ({feed.bozo_exception}).")
         raise FetchError("O feed respondeu, mas não tem nenhuma notícia.")
@@ -140,7 +229,7 @@ def fetch_rss(source: dict, client: httpx.Client, settings: dict) -> list[dict]:
 # --- CISA KEV -------------------------------------------------------------
 
 def fetch_cisa_kev(source: dict, client: httpx.Client, settings: dict) -> list[dict]:
-    response = http_get(client, source["url"])
+    response = http_get(client, source["url"], cache=settings.get("http_cache"))
     try:
         data = response.json()
         vulns = data["vulnerabilities"]
@@ -218,6 +307,7 @@ def fetch_nvd(source: dict, client: httpx.Client, settings: dict) -> list[dict]:
             "cves": [cve_id],
             "cvss": score,
             "kev": bool(cve.get("cisaExploitAdd")),
+            "nvd_raw": cve,
         })
     return items
 
@@ -270,7 +360,7 @@ def fetch_github_advisories(source: dict, client: httpx.Client, settings: dict) 
 # --- Raspagem de páginas sem RSS ------------------------------------------
 
 def fetch_scrape(source: dict, client: httpx.Client, settings: dict) -> list[dict]:
-    response = http_get(client, source["url"])
+    response = http_get(client, source["url"], cache=settings.get("http_cache"))
     soup = BeautifulSoup(response.text, "html.parser")
     try:
         blocks = soup.select(source["item_selector"])
@@ -326,7 +416,7 @@ def fetch_source(source: dict, client: httpx.Client, settings: dict) -> list[dic
         raise FetchError(f"Tipo de fonte desconhecido: {source.get('type')}")
     try:
         return fetcher(source, client, settings)
-    except FetchError:
+    except (FetchError, NotModified):
         raise
     except Exception as exc:  # erro inesperado também vai para o relatório
         raise FetchError(f"Erro inesperado ({type(exc).__name__}): {exc}")
@@ -352,8 +442,8 @@ def discover_feeds(url: str, client: httpx.Client) -> list[dict]:
         for guess in ("feed", "rss", "feed.xml", "rss.xml", "atom.xml"):
             candidate = urljoin(str(response.url).rstrip("/") + "/", guess)
             try:
-                r = client.get(candidate)
-            except httpx.HTTPError:
+                r = _download(client, candidate)
+            except (httpx.HTTPError, FetchError):
                 continue
             if r.status_code == 200 and feedparser.parse(r.content).entries:
                 found.append({"url": candidate, "title": ""})
@@ -366,25 +456,12 @@ def discover_feeds(url: str, client: httpx.Client) -> list[dict]:
 
 # --- Leitura do artigo completo dentro do programa ------------------------
 
-def fetch_article(url: str, client: httpx.Client) -> str:
-    """Baixa a página e extrai só o texto principal (modo leitura)."""
+def fetch_article(url: str, client: httpx.Client, block_images: bool = False) -> str:
+    """Baixa a página e extrai só o texto principal (modo leitura), já limpo."""
     from readability import Document
+
+    from .sanitize import clean_html
 
     response = http_get(client, url)
     doc = Document(response.text)
-    body = doc.summary(html_partial=True)
-    soup = BeautifulSoup(body, "html.parser")
-    for tag in soup(["script", "style", "iframe", "form", "noscript", "object", "embed"]):
-        tag.decompose()
-    base = str(response.url)
-    for tag in soup.find_all(True):
-        for attr in list(tag.attrs):
-            if attr.lower().startswith("on"):
-                del tag[attr]
-        for attr in ("href", "src"):
-            if tag.get(attr):
-                tag[attr] = urljoin(base, tag[attr])
-        if tag.name == "a":
-            tag["target"] = "_blank"
-            tag["rel"] = "noopener noreferrer"
-    return str(soup)
+    return clean_html(doc.summary(html_partial=True), str(response.url), block_images=block_images)

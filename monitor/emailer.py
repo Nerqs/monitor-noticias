@@ -85,9 +85,21 @@ def send_message(cfg: dict, subject: str, html: str, text: str) -> None:
         raise EmailError("Informe pelo menos um destinatário nas configurações de e-mail.")
     if not email_cfg.get("smtp_host"):
         raise EmailError("Informe o servidor SMTP nas configurações de e-mail.")
-    password = secrets.get_password(username) if username else None
-    if username and not password:
-        raise EmailError("Senha do e-mail não encontrada. Salve a senha na página Configurações.")
+    use_oauth = email_cfg.get("auth") == "oauth_microsoft"
+    password = None
+    if use_oauth:
+        from . import oauth
+
+        if not username:
+            raise EmailError("Informe o usuário (seu e-mail) nas configurações.")
+        try:
+            auth_string = oauth.xoauth2_string(username, cfg)
+        except oauth.OAuthError as exc:
+            raise EmailError(str(exc))
+    else:
+        password = secrets.get_password(username) if username else None
+        if username and not password:
+            raise EmailError("Senha do e-mail não encontrada. Salve a senha na página Configurações.")
 
     msg = EmailMessage()
     msg["Subject"] = subject
@@ -111,15 +123,19 @@ def send_message(cfg: dict, subject: str, html: str, text: str) -> None:
             if security == "starttls":
                 server.starttls(context=context)
                 server.ehlo()
-            if username:
+            if use_oauth:
+                server.auth("XOAUTH2", lambda challenge=None: auth_string, initial_response_ok=True)
+            elif username:
                 server.login(username, password)
             server.send_message(msg)
     except smtplib.SMTPAuthenticationError as exc:
         detail = exc.smtp_error.decode(errors="ignore") if isinstance(exc.smtp_error, bytes) else str(exc.smtp_error)
         hint = ""
-        if "basic authentication" in detail.lower() or "outlook" in host or "office365" in host:
-            hint = (" Contas Microsoft costumam exigir uma senha de aplicativo (com verificação em duas etapas"
-                    " ativada) ou ter o SMTP AUTH liberado. Veja o README.")
+        if use_oauth:
+            hint = " Desconecte e conecte de novo a conta Microsoft; confira se o e-mail do usuário é o mesmo da conta."
+        elif "basic authentication" in detail.lower() or "outlook" in host or "office365" in host:
+            hint = (" A Microsoft está desligando o login por senha: use \"Conta Microsoft (OAuth2)\" em"
+                    " Configurações → E-mail. Veja o README.")
         elif "gmail" in host:
             hint = " No Gmail, use uma senha de app (myaccount.google.com/apppasswords)."
         raise EmailError(f"O servidor recusou o usuário/senha: {detail}.{hint}")

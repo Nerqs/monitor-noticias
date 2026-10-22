@@ -57,3 +57,39 @@ def set_password(username: str, password: str) -> bool:
 
 def has_password(username: str) -> bool:
     return bool(get_password(username))
+
+
+# --- Outros segredos (tokens de chat, webhooks, login Microsoft) ---------------
+
+def _secret_account(name: str) -> str:
+    return f"segredo:{name}"
+
+
+def get_secret(name: str) -> str | None:
+    env = os.environ.get(f"MONITOR_{name.upper()}")
+    if env:
+        return env
+    kr = _keyring()
+    if kr:
+        try:
+            return kr.get_password(SERVICE, _secret_account(name))
+        except Exception:
+            return None
+    return None
+
+
+def set_secret(name: str, value: str | None) -> bool:
+    kr = _keyring()
+    if not kr:
+        return False
+    try:
+        if value:
+            kr.set_password(SERVICE, _secret_account(name), value)
+        else:
+            try:
+                kr.delete_password(SERVICE, _secret_account(name))
+            except Exception:
+                pass
+        return True
+    except Exception:
+        return False

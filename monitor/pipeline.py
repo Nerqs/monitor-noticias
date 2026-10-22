@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+import json
 import logging
 import threading
+import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
-from . import config, db, fetchers, preferences, scoring
+from . import config, cveinfo, db, fetchers, preferences, scoring
 
 log = logging.getLogger(__name__)
 
@@ -71,6 +73,8 @@ def process_items(source: dict, raw_items: list[dict], cfg: dict, run_id: int | 
     model = preferences.get_model()
     for raw in raw_items:
         scored = scoring.score_item(raw, source["category"], cfg)
+        if raw.get("nvd_raw") and raw.get("cves"):
+            db.save_cve_nvd(raw["cves"][0], json.dumps(raw["nvd_raw"]))
         item = {
             "uid": raw["uid"],
             "source_id": source["id"],
@@ -86,7 +90,10 @@ def process_items(source: dict, raw_items: list[dict], cfg: dict, run_id: int | 
             "kev": int(bool(raw.get("kev"))),
             "run_id": run_id,
             **scored,
+            "base_score": scored["score"],
+            "base_reasons": scored["reasons"],
         }
+        item.update(scoring.finalize(item, cfg))
         item["affinity"] = preferences.affinity(item, model)
         if db.insert_item(item):
             new += 1
@@ -97,7 +104,7 @@ def test_source(source: dict) -> dict:
     """Busca uma fonte sem gravar nada (botão "Testar" da página de fontes)."""
     cfg = config.load_config()
     settings = cfg.get("collection", {})
-    with fetchers.make_client(settings.get("timeout_seconds", 20)) as client:
+    with client_for(settings, retries=False) as client:
         try:
             items = fetchers.fetch_source(source, client, settings)
         except fetchers.FetchError as exc:
@@ -107,6 +114,15 @@ def test_source(source: dict) -> dict:
         scored = scoring.score_item(raw, source.get("category", "tecnologia"), cfg)
         preview.append({"title": raw["title"], "url": raw["url"], "level": scored["level"]})
     return {"ok": True, "count": len(items), "preview": preview}
+
+
+def client_for(settings: dict, retries: bool = True):
+    return fetchers.make_client(
+        settings.get("timeout_seconds", 20),
+        allow_private=bool(settings.get("allow_private_networks")),
+        max_mb=float(settings.get("max_download_mb") or fetchers.MAX_DOWNLOAD_MB),
+        retries=retries,
+    )
 
 
 def summary_message(summary: dict) -> str:
@@ -128,30 +144,49 @@ def run_collection(source_ids: list[str] | None = None, workers: int = 8) -> dic
         progress.update(running=True, total=len(sources), run_id=run_id, message="Coletando…")
 
         ok = failed = new_total = 0
-        with fetchers.make_client(settings.get("timeout_seconds", 20)) as client:
+        fetch_settings = {**settings, "http_cache": db.HttpCache()}
+        with client_for(settings) as client:
             def job(source):
                 progress.started(source["name"])
+                started = time.monotonic()
                 try:
-                    return source, fetchers.fetch_source(source, client, settings), None
+                    items = fetchers.fetch_source(source, client, fetch_settings)
+                    return source, items, None, False, started
+                except fetchers.NotModified:
+                    return source, [], None, True, started
                 except fetchers.FetchError as exc:
-                    return source, [], str(exc)
+                    return source, [], str(exc), False, started
 
             with ThreadPoolExecutor(max_workers=workers) as pool:
                 futures = [pool.submit(job, s) for s in sources]
                 for future in as_completed(futures):
-                    source, items, error = future.result()
+                    source, items, error, not_modified, started = future.result()
+                    duration = int((time.monotonic() - started) * 1000)
                     if error:
                         failed += 1
                         db.add_error(run_id, source, error)
+                        db.add_source_run(run_id, source["id"], False, duration)
                         log.warning("%s: %s", source["name"], error)
                     else:
                         ok += 1
-                        new_total += process_items(source, items, cfg, run_id)
+                        new = process_items(source, items, cfg, run_id)
+                        new_total += new
+                        db.add_source_run(run_id, source["id"], True, duration, len(items), new, not_modified)
                     progress.finished(source["name"], new_total, failed)
+
+            progress.update(message="Consultando EPSS e versões afetadas…")
+            try:
+                enrich = cveinfo.enrich_pending(cfg, client)
+                for problem in enrich["errors"][:3]:
+                    log.warning("enriquecimento: %s", problem)
+            except Exception as exc:  # enriquecimento nunca derruba a coleta
+                log.exception("enriquecimento falhou: %s", exc)
 
         db.finish_run(run_id, ok, failed, new_total)
         summary = {"run_id": run_id, "sources_ok": ok, "sources_failed": failed, "new_items": new_total}
         progress.update(running=False, current=[], message=summary_message(summary))
+
+        after_collection(cfg, summary)
 
         if cfg.get("email", {}).get("send_after_collect"):
             from . import emailer
@@ -164,6 +199,23 @@ def run_collection(source_ids: list[str] | None = None, workers: int = 8) -> dic
     finally:
         progress.update(running=False)
         _run_lock.release()
+
+
+def after_collection(cfg: dict, summary: dict) -> None:
+    """Tarefas que rodam depois da coleta, sem atrapalhar o resultado dela."""
+    from . import maintenance, notify, selfcheck
+
+    for name, task in (
+        ("faxina", lambda: maintenance.run_if_due(cfg)),
+        ("autoauditoria", lambda: selfcheck.run_if_due(cfg)),
+        ("chat", lambda: summary.__setitem__("chat", notify.send_highlights(cfg))),
+    ):
+        try:
+            task()
+        except Exception as exc:
+            log.warning("%s: %s", name, exc)
+            if name == "chat":
+                summary["chat_error"] = str(exc)
 
 
 def run_in_background(source_ids: list[str] | None = None) -> bool:

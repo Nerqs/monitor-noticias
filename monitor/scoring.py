@@ -72,16 +72,64 @@ def score_item(item: dict, category: str, config: dict) -> dict:
         score += 35 if is_security else 10
         reasons.append("Cita o que você usa: " + ", ".join(tech_hits))
 
-    if score >= CRITICAL_LEVEL:
-        level = "critico"
-    elif score >= HIGH_LEVEL:
-        level = "alto"
-    else:
-        level = "normal"
-
     return {
         "score": score,
-        "level": level,
+        "level": level_for(score),
         "matched_tech": ",".join(tech_hits),
         "reasons": " · ".join(reasons),
     }
+
+
+def level_for(score: int) -> str:
+    if score >= CRITICAL_LEVEL:
+        return "critico"
+    if score >= HIGH_LEVEL:
+        return "alto"
+    return "normal"
+
+
+def epss_label(epss: float) -> str:
+    return f"EPSS {epss * 100:.0f}%" if epss >= 0.01 else "EPSS <1%"
+
+
+def finalize(item: dict, config: dict) -> dict:
+    """Aplica sobre a nota do conteúdo (``base_score``) o que vem depois dela:
+    filtros pessoais, probabilidade de exploração (EPSS) e checagem de versão.
+
+    Devolve ``score``, ``level``, ``reasons`` e ``muted``.
+    """
+    score = int(item.get("base_score") if item.get("base_score") is not None else item.get("score") or 0)
+    reasons = [r for r in (item.get("base_reasons") or "").split(" · ") if r]
+    muted = 0
+
+    text = " ".join([item.get("title") or "", item.get("summary") or ""])
+    for rule in config.get("filters", {}).get("rules") or []:
+        term = str(rule.get("term") or "").strip()
+        if not term or (rule.get("source") and rule["source"] != item.get("source_id")):
+            continue
+        if not matches([term], text):
+            continue
+        if rule.get("action") == "mute":
+            muted = 1
+        elif rule.get("action") == "highlight":
+            score += 25
+            reasons.append(f"Destaque seu: {term}")
+
+    epss = item.get("epss")
+    if epss is not None:
+        if epss >= 0.5:
+            score += 30
+            reasons.append(f"{epss_label(epss)}: alta chance de exploração em 30 dias")
+        elif epss >= 0.1:
+            score += 15
+            reasons.append(f"{epss_label(epss)} de chance de exploração em 30 dias")
+
+    verdict = item.get("version_verdict")
+    if verdict == "afeta":
+        score += 40
+        reasons.insert(0, f"Afeta sua versão: {item.get('version_note')}")
+    elif verdict == "nao_afeta":
+        score -= 25
+        reasons.append(f"Sua versão não é afetada: {item.get('version_note')}")
+
+    return {"score": score, "level": level_for(score), "reasons": " · ".join(reasons), "muted": muted}
