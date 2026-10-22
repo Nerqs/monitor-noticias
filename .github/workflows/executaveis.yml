@@ -70,6 +70,8 @@ jobs:
           sudo apt-get update -q
           sudo apt-get install -y -q libxkbfile1 libxcb-cursor0 libxcb-icccm4 libxcb-image0 \
             libxcb-keysyms1 libxcb-render-util0 libxcb-util1 xvfb
+          # Estas o PyInstaller deixa de fora (são do driver de vídeo); todo desktop tem.
+          sudo apt-get install -y -q libegl1 libgl1
 
       - name: Gerar executável
         run: python empacotar.py
