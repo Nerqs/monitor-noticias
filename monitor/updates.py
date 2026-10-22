@@ -118,7 +118,12 @@ def _latest(cfg: dict) -> dict:
             return fetchers.http_get(client, API, headers=_headers(cfg)).json()
         except fetchers.FetchError as exc:
             if "404" in str(exc):
-                raise UpdateError("Nenhuma versão publicada ainda no GitHub.")
+                # O GitHub responde 404 tanto sem versão publicada quanto para
+                # repositório privado consultado sem token.
+                if cfg.get("collection", {}).get("github_token"):
+                    raise UpdateError("Nenhuma versão publicada no GitHub, ou o token do GitHub não tem acesso ao repositório.")
+                raise UpdateError("O GitHub não mostrou nenhuma versão. Se o repositório for privado, crie um token "
+                                  "com acesso de leitura a ele e informe em Configurações → Token do GitHub.")
             raise UpdateError(f"Não foi possível consultar o GitHub: {exc}")
 
 

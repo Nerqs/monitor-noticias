@@ -310,3 +310,9 @@ def test_data_dir_is_stable_across_threads(monkeypatch, tmp_path):
         t.join()
     # samefile: no Windows o resolve() às vezes devolve o mesmo caminho com o prefixo \\?\
     assert all(path.samefile(tmp_path / "zip" / "data") for path in seen)
+
+
+def test_private_repo_without_token_explains(github):
+    github(httpx.MockTransport(lambda request: httpx.Response(404, json={"message": "Not Found"})))
+    with pytest.raises(updates.UpdateError, match="Token do GitHub"):
+        updates.check()
