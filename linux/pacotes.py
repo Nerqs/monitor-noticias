@@ -204,6 +204,9 @@ FLATPAK_PERMISSIONS = [
     "--talk-name=org.kde.StatusNotifierWatcher",   # ícone na bandeja
     "--talk-name=org.freedesktop.secrets",         # senha do e-mail no chaveiro
     "--filesystem=xdg-config/autostart:create",    # iniciar com o sistema
+    # O executável se descompacta numa pasta temporária a cada abertura (~700 MB com o Qt).
+    # O /tmp do Flatpak é pequeno e fica na memória; o /var/tmp dele fica no disco.
+    "--env=TMPDIR=/var/tmp",
 ]
 
 

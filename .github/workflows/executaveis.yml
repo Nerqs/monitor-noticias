@@ -62,6 +62,15 @@ jobs:
         run: |
           if (-not (Test-Path "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe")) { choco install innosetup -y --no-progress }
 
+      - name: Bibliotecas do Qt para embutir no executável (Linux)
+        if: runner.os == 'Linux'
+        # O PyInstaller copia para dentro do executável as que estiverem instaladas aqui;
+        # sem elas o Qt embutido não carrega em distribuições que não as trazem.
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q libxkbfile1 libxcb-cursor0 libxcb-icccm4 libxcb-image0 \
+            libxcb-keysyms1 libxcb-render-util0 libxcb-util1 xvfb
+
       - name: Gerar executável
         run: python empacotar.py
 
@@ -129,6 +138,12 @@ jobs:
       - name: Autoteste do executável (Linux)
         if: runner.os == 'Linux'
         run: ./dist/MonitorNoticias --autoteste
+
+      - name: Janela própria abre no executável (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          QT_QPA_PLATFORM=xcb xvfb-run -a ./dist/MonitorNoticias --testar-janela | tee janela.txt
+          grep -q "motor=qtwebengine.*-> OK" janela.txt
 
       - name: Pacotes Linux (AppImage, .deb, PKGBUILD e pasta do Flatpak)
         if: runner.os == 'Linux'
@@ -261,6 +276,12 @@ jobs:
           flatpak install --user -y --noninteractive --bundle saida/MonitorNoticias-linux.flatpak
           dbus-run-session -- flatpak run io.github.nerqs.MonitorNoticias --autoteste | tee flatpak.txt
           grep -q "instalação flatpak -> OK" flatpak.txt
+
+      - name: Janela própria abre no Flatpak
+        run: |
+          dnf install -y -q xorg-x11-server-Xvfb xorg-x11-xauth
+          xvfb-run -a dbus-run-session -- flatpak run --env=QT_QPA_PLATFORM=xcb             io.github.nerqs.MonitorNoticias --testar-janela | tee janela.txt
+          grep -q "motor=qtwebengine.*-> OK" janela.txt
 
       - uses: actions/upload-artifact@v7
         with:

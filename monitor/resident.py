@@ -21,6 +21,19 @@ from . import config, db, emailer, notify, pipeline, scheduler
 
 log = logging.getLogger(__name__)
 TICK = 30  # segundos entre as conferências do laço
+# Depois que a janela fecha de vez, o webview.start devia voltar; no Qt às vezes não volta.
+QUIT_GRACE = 5.0
+
+
+def page_js(window, script: str):
+    """Valor de uma expressão JavaScript da página. O evaluate_js do pywebview usa eval(),
+    que a CSP da página bloqueia no Qt; aí roda o script direto (run_js)."""
+    try:
+        return window.evaluate_js(script)
+    except Exception as exc:
+        if "unsafe-eval" not in str(exc):
+            raise
+        return window.run_js(script)
 
 
 class Desktop:
@@ -195,7 +208,7 @@ class Desktop:
 
     def _ask_close(self):
         try:
-            asked = self.window.evaluate_js("window.monitorAskClose ? window.monitorAskClose() : false")
+            asked = page_js(self.window, "window.monitorAskClose ? window.monitorAskClose() : false")
         except Exception:
             asked = False
         if asked:
@@ -215,6 +228,13 @@ class Desktop:
         target = self._ask_close if desktop.get("ask_on_close", True) else self.hide_window
         threading.Thread(target=target, daemon=True).start()
         return False
+
+    def on_closed(self, *_):
+        """A janela fechou de vez: se o webview.start não voltar (Qt), encerra mesmo assim."""
+        if self.on_quit:
+            timer = threading.Timer(QUIT_GRACE, self.on_quit)
+            timer.daemon = True
+            timer.start()
 
     def quit(self, *_):
         self.quitting = True

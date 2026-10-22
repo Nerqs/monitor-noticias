@@ -17,6 +17,7 @@ import logging
 import os
 import sys
 import threading
+import time
 import webbrowser
 
 from . import __version__, db, emailer, pipeline, presence, web
@@ -123,6 +124,7 @@ def _open_window(url: str, on_start=None, desktop=None, hidden: bool = False):
         window.events.closing += desktop.on_closing
         window.events.minimized += lambda: setattr(desktop, "minimized", True)
         window.events.restored += lambda: setattr(desktop, "minimized", False)
+        window.events.closed += desktop.on_closed
 
         def on_start(window):
             # Roda numa thread depois que a janela existe: liga a bandeja e o laço de coleta.
@@ -131,11 +133,23 @@ def _open_window(url: str, on_start=None, desktop=None, hidden: bool = False):
                 desktop.show_window()  # sem bandeja não dá para ficar escondido
             desktop.start_loop()
 
+    gui = linux_gui()
     if on_start:
-        webview.start(on_start, window)
+        webview.start(on_start, window, gui=gui)
     else:
-        webview.start()
+        webview.start(gui=gui)
     return window
+
+
+def linux_gui() -> str | None:
+    """Executável do Linux: usa o Qt que vem dentro dele (o GTK do sistema não carrega
+    no Python embutido). Fora do executável, o pywebview escolhe sozinho."""
+    if not sys.platform.startswith("linux") or not getattr(sys, "frozen", False):
+        return None
+    if os.environ.get("FLATPAK_ID"):
+        # O sandbox do Chromium (QtWebEngine) não funciona dentro do sandbox do Flatpak.
+        os.environ.setdefault("QTWEBENGINE_DISABLE_SANDBOX", "1")
+    return "qt"
 
 
 def _finish(server, code: int) -> int:
@@ -200,11 +214,18 @@ def run_gui(collect: bool, use_browser: bool, at_login: bool = False) -> int:
     # Modo navegador: encerra quando a última aba fecha (ou com Ctrl+C no terminal).
     print(f"Monitor de notícias aberto em {url}  (feche a aba ou use Ctrl+C para sair)")
     desktop.start_loop()
-    webbrowser.open(url)
+    opened = webbrowser.open(url)
     try:
-        presence.wait_until_gone()
+        opened = presence.wait_until_gone() if opened else False
     except KeyboardInterrupt:
-        pass
+        opened = True
+    if not opened:
+        # Sem janela e sem navegador o programa ficaria rodando escondido: avisa e sai.
+        msg = f"Não foi possível abrir a janela nem o navegador. Abra {url} ou rode com --diagnostico."
+        logging.error(msg)
+        print(msg, file=sys.stderr)
+        desktop.notify("Monitor de notícias não abriu", msg, urgent=True)
+        return _finish(server, 1)
     return _finish(server, 0)
 
 
@@ -212,25 +233,46 @@ def window_test(seconds: float = 60.0) -> int:
     """Abre a janela própria, confere que a página carregou e fecha (usado no CI)."""
     import webview
 
+    from .resident import QUIT_GRACE, page_js
+
     app = web.create_app()
     server, url = _serve(app)
     result = {"title": None}
 
+    def report() -> int:
+        ok = bool(result["title"])
+        msg = (f"testar-janela: motor={getattr(webview, 'renderer', '?')}, título={result['title']!r} -> "
+               f"{'OK' if ok else 'FALHOU'}")
+        logging.info(msg)
+        print(msg, flush=True)
+        server.shutdown()
+        return 0 if ok else 1
+
     def check(window):
         if window.events.loaded.wait(seconds):
-            result["title"] = window.evaluate_js("document.title")
+            # O script da página manda um sinal de vida assim que roda.
+            deadline = time.monotonic() + seconds
+            while not presence.opened() and time.monotonic() < deadline:
+                time.sleep(0.5)
+            try:
+                if presence.opened():
+                    result["title"] = page_js(window, "document.title")
+                else:
+                    logging.warning("testar-janela: a página não deu sinal; está em %s (%s)", window.get_current_url(),
+                                    page_js(window, "document.readyState + ' ' + document.title"))
+            except Exception:
+                logging.exception("testar-janela: não leu o título da página")
         window.destroy()
+        # No Qt o webview.start às vezes não volta depois do destroy: encerra por aqui.
+        timer = threading.Timer(QUIT_GRACE, lambda: os._exit(report()))
+        timer.daemon = True
+        timer.start()
 
     try:
         _open_window(url, check)
     except Exception:
         logging.exception("testar-janela: falhou ao abrir")
-    ok = bool(result["title"])
-    msg = f"testar-janela: motor={getattr(webview, 'renderer', '?')}, título={result['title']!r} -> {'OK' if ok else 'FALHOU'}"
-    logging.info(msg)
-    print(msg)
-    server.shutdown()
-    return 0 if ok else 1
+    return report()
 
 
 def _prepare_data():

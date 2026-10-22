@@ -93,14 +93,20 @@ def check_window() -> dict:
         return _check("Janela própria", "aviso", "pywebview não está instalado; o leitor abre no navegador.",
                       "pip install pywebview")
     if sys.platform.startswith("linux"):
-        for module in ("gi", "qtpy", "PyQt5", "PyQt6", "PySide6"):
+        # Importa o motor de páginas de verdade: o Qt pode estar lá e faltar biblioteca do sistema.
+        errors = []
+        for module in ("gi", "qtpy.QtWebEngineWidgets"):
             try:
                 importlib.import_module(module)
-                return _check("Janela própria", "ok", f"pywebview com {module}.")
-            except Exception:
-                continue
+                return _check("Janela própria", "ok", f"pywebview com {module.split('.')[0]}.")
+            except Exception as exc:
+                errors.append(str(exc))
+        if getattr(sys, "frozen", False):
+            # O executável já traz o Qt; o que falta é biblioteca do sistema (libGL, libnss3...).
+            return _check("Janela própria", "aviso", f"O Qt embutido não carregou ({errors[-1]}); o leitor abre "
+                          "no navegador.", "Instale a biblioteca citada pelo gerenciador de pacotes da distribuição.")
         return _check("Janela própria", "aviso", "Sem GTK nem Qt: o leitor abre no navegador.",
-                      "sudo apt install python3-gi gir1.2-webkit2-4.1")
+                      "pip install PySide6-Essentials PySide6-WebEngine")
     return _check("Janela própria", "ok", "pywebview disponível.")
 
 

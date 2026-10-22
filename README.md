@@ -101,8 +101,9 @@ Não precisa de Python: ele já vem dentro do programa. Na primeira vez o Window
 Seus dados ficam na pasta `data`, ao lado do programa. Para atualizar, baixe a versão nova e copie a pasta
 `data` para dentro dela.
 
-No Linux, se a janela própria não abrir, o programa usa o navegador. Para ter a janela, instale
-`python3-gi` e `gir1.2-webkit2-4.1` (Debian/Ubuntu).
+No Linux a janela própria usa o Qt que já vem dentro do programa. Se ela não abrir (falta alguma
+biblioteca do sistema, que o `--diagnostico` diz qual é), o programa usa o navegador; sem navegador,
+avisa e fecha em vez de ficar rodando escondido.
 
 ## Rodar a partir do código (para quem tem Python)
 
