@@ -54,6 +54,45 @@ def build_installer() -> Path | None:
     return ROOT / "dist" / f"{NAME}-instalador-windows.exe"
 
 
+# Bibliotecas do sistema que o executável do Linux NÃO leva: as da máquina de build
+# (Ubuntu 22.04) são mais velhas que as da distribuição e quebram o que vem dela. Ex.: a
+# libstdc++ velha impede o driver de vídeo (Mesa) de carregar e o Qt aborta sem EGL; a
+# fontconfig velha não entende a configuração de fontes nova. Todo desktop tem estas.
+LINUX_SYSTEM_LIBS = (
+    "libstdc++", "libgcc_s", "libgbm", "libdrm", "libEGL", "libGL",
+    "libfontconfig", "libfreetype.so", "libharfbuzz.so", "libexpat", "libz.so",
+    "libglib-2.0", "libgobject-2.0", "libgio-2.0", "libgmodule-2.0", "libgthread-2.0",
+    "libdbus-1", "libsystemd", "libudev", "libselinux", "libmount", "libblkid", "libpcre",
+    "libX11", "libXext", "libXau.so", "libXdmcp", "libXfixes", "libXrender", "libXi.so",
+    "libXrandr", "libXcursor", "libXcomposite", "libXdamage", "libXtst", "libXinerama",
+    "libxcb.so", "libxcb-render.so", "libxcb-shm", "libxcb-xfixes", "libxcb-randr",
+    "libxcb-shape", "libxcb-sync", "libxcb-xkb", "libxcb-glx", "libxkbcommon",
+    "libasound", "libnss3", "libnssutil3", "libsmime3", "libnspr4", "libplc4", "libplds4",
+    "libfreebl", "libsoftokn",
+    # Só vêm pelo plugin de tema GTK do Qt, que também fica de fora.
+    "libgtk-3", "libgdk-3", "libgdk_pixbuf", "libatk", "libatspi", "libcairo", "libpango",
+    "libpixman", "libepoxy", "libthai", "libdatrie", "libfribidi", "libgraphite2", "libcups",
+    "libavahi", "libgnutls", "libgssapi", "libkrb5", "libk5crypto", "libcom_err",
+)
+
+
+def linux_spec(options: list[str]) -> Path:
+    """Gera o .spec do Linux e tira dele as bibliotecas do sistema (LINUX_SYSTEM_LIBS)."""
+    subprocess.run([sys.executable, "-m", "PyInstaller.utils.cliutils.makespec", *options],
+                   check=True, cwd=ROOT)
+    spec = ROOT / f"{NAME}.spec"
+    text = spec.read_text(encoding="utf-8")
+    keep = (
+        f"SYSTEM_LIBS = {LINUX_SYSTEM_LIBS!r}\n"
+        "a.binaries = [b for b in a.binaries\n"
+        "              if not os.path.basename(b[0]).startswith(SYSTEM_LIBS)\n"
+        "              and 'platformthemes/libqgtk3' not in b[0]]\n"
+    )
+    text = "import os\n" + text.replace("pyz = PYZ(", keep + "pyz = PYZ(", 1)
+    spec.write_text(text, encoding="utf-8")
+    return spec
+
+
 def main() -> int:
     write_build_deps()
     sep = os.pathsep
@@ -88,7 +127,10 @@ def main() -> int:
         for module in ("PyQt5", "PyQt6", "gi"):
             args += ["--exclude-module", module]
     args.append(str(ROOT / "run.py"))
-    subprocess.run(args, check=True, cwd=ROOT)
+    if WINDOWS:
+        subprocess.run(args, check=True, cwd=ROOT)
+    else:
+        subprocess.run(args[:5] + [str(linux_spec(args[5:]))], check=True, cwd=ROOT)
 
     dist = ROOT / "dist"
     if WINDOWS:

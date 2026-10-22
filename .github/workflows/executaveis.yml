@@ -228,7 +228,7 @@ jobs:
 
       - name: Gerar o pacote com o PKGBUILD publicado
         run: |
-          pacman -Syu --noconfirm --needed base-devel libglvnd
+          pacman -Syu --noconfirm --needed base-devel gcc-libs libglvnd mesa fontconfig freetype2 nss libxkbcommon-x11 dbus glib2 alsa-lib
           useradd -m construtor
           mkdir /home/construtor/pkg
           ver=$(sed -n 's/^pkgver=//p' pacotes/PKGBUILD)
