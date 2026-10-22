@@ -148,3 +148,25 @@ def test_migrates_portable_without_database(monkeypatch, tmp_path):
     (target / config.PORTABLE_NOTE).write_text(str(portable))
     assert config.migrate_portable(target) == portable.resolve()
     assert (target / "config.yaml").read_text() == "x: 1" and (portable / config.MOVED_NOTE).exists()
+
+
+def test_data_dir_is_stable_across_threads(monkeypatch, tmp_path):
+    """Várias threads ao mesmo tempo não podem cair para a pasta do usuário (2º banco)."""
+    import threading
+
+    monkeypatch.delenv("MONITOR_DATA_DIR")
+    monkeypatch.setenv("LOCALAPPDATA", str(tmp_path / "local"))
+    monkeypatch.setattr(sys, "frozen", True, raising=False)
+    monkeypatch.setattr(sys, "executable", str(tmp_path / "zip" / "MonitorNoticias.exe"))
+    seen = set()
+
+    def worker():
+        for _ in range(200):
+            seen.add(config.data_dir())
+
+    threads = [threading.Thread(target=worker) for _ in range(8)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+    assert seen == {tmp_path / "zip" / "data"}

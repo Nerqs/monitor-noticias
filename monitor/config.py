@@ -74,7 +74,10 @@ def _default_data_dir() -> Path:
     beside = Path(sys.executable).resolve().parent / "data"
     try:
         beside.mkdir(parents=True, exist_ok=True)
-        probe = beside / ".teste-escrita"
+        # Nome único por thread: várias threads chamam isto ao mesmo tempo e, com
+        # um nome só, uma apagava o teste da outra e o programa caía para a pasta
+        # do usuário, criando um segundo banco por engano.
+        probe = beside / f".teste-escrita-{os.getpid()}-{threading.get_ident()}"
         probe.write_text("ok")
         probe.unlink()
         return beside
@@ -128,7 +131,7 @@ def migrate_portable(target: Path | None = None) -> Path | None:
         migration_status = f"nada para copiar de {source}"
         return None
     shutil.copytree(source, target, dirs_exist_ok=True,
-                    ignore=shutil.ignore_patterns("atualizacoes", ".teste-escrita", MOVED_NOTE))
+                    ignore=shutil.ignore_patterns("atualizacoes", ".teste-escrita*", MOVED_NOTE))
     note.unlink(missing_ok=True)
     try:
         (source / MOVED_NOTE).write_text(
