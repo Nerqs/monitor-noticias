@@ -201,9 +201,15 @@ def _prepare_data():
         if config.is_installed():
             return config.migrate_portable()
         config.remember_portable()
-    except OSError:
-        pass  # sem permissão ou disco cheio: segue com a pasta como está
+    except OSError as exc:  # sem permissão ou disco cheio: segue com a pasta como está
+        config.migration_status = f"falhou: {exc!r}"
     return None
+
+
+def _migration_status() -> str:
+    from . import config
+
+    return config.migration_status
 
 
 def _reschedule() -> None:
@@ -241,6 +247,8 @@ def main(argv: list[str] | None = None) -> int:
     if not args.autoteste:
         migrated = _prepare_data()
     logsetup.setup()
+    if config_status := _migration_status():
+        logging.info("migração da versão .zip: %s", config_status)
     if migrated:
         logging.info("dados da versão .zip copiados de %s", migrated)
         _reschedule()
