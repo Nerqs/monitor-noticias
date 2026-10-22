@@ -32,8 +32,9 @@ resumo bonito por e-mail.
   público, versões afetadas e linha do tempo.
 - **Filtros pessoais** para silenciar ou destacar termos, e **busca completa** (sem acento, por começo de
   palavra, `-palavra` para excluir).
-- **Celular**: destaques por Telegram, Discord ou Microsoft Teams. **Alertas na área de trabalho** com o modo
-  residente, que fica perto do relógio.
+- **Celular**: destaques por Telegram, Discord ou Microsoft Teams.
+- **Bandeja e notificações**: inicia com o sistema, fechar a janela deixa o programa perto do relógio coletando
+  de tempo em tempo, notificação de notícias novas e coleta agendada que ficou para trás roda ao abrir.
 - **Saúde do programa**: diagnóstico com um clique, fontes "silenciosas" (respondem, mas pararam de trazer
   novidade), saúde de cada fonte, agendamento da coleta diária com aviso quando ela não roda, faxina do banco,
   verificação de atualização com conferência de SHA-256 e relatório para suporte.
@@ -101,7 +102,7 @@ Na primeira vez o script cria um ambiente virtual (`.venv`) e instala as depend�
 | `--so-coletar --email` | Coleta e envia o resumo por e-mail |
 | `--navegador` | Usa o navegador em vez da janela própria |
 | `--diagnostico` | Confere ambiente, banco, internet, relógio, e-mail e agendamento |
-| `--residente` | Fica perto do relógio e avisa quando surge uma falha crítica |
+| `--inicio-sistema` | Abre só o ícone perto do relógio e coleta se a agendada ficou para trás (`--residente` também vale) |
 
 Funcionam com o executável (`MonitorNoticias.exe --coletar`), com `python run.py` e com os scripts
 `iniciar.bat` / `iniciar.sh`. No Windows o executável não tem console: o resultado fica em `data/logs/monitor.log`.
@@ -183,11 +184,25 @@ Em **Configurações → Celular**:
 
 Marque **Enviar destaques após cada coleta**. Só vão as notícias críticas e altas, e cada uma uma vez só.
 
-## Alertas na área de trabalho
+## Bandeja, iniciar com o sistema e notificações
 
-`--residente` (ou **Saúde → Iniciar alertas com o sistema**) deixa um ícone perto do relógio. A cada hora
-(ajustável em **Configurações → Alertas**) ele coleta as fontes de segurança e mostra uma notificação para cada
-notícia crítica nova. Pelo ícone dá para abrir o leitor, coletar agora ou pausar os alertas.
+Tudo fica em **Configurações → Bandeja, início e notificações**:
+
+- **Iniciar junto com o sistema**: no Windows grava o programa na lista do que abre ao entrar (chave `Run` do
+  usuário, aparece em Gerenciador de Tarefas → Aplicativos de inicialização); no Linux cria
+  `~/.config/autostart/monitor-noticias.desktop`. Ao entrar, abre só o ícone perto do relógio.
+- **Coleta que ficou para trás**: se há coleta agendada (Saúde → Coleta automática) e o horário de hoje já
+  passou sem coletar (computador desligado), o programa coleta assim que abre. Com ele aberto, a coleta do
+  horário roda nele mesmo, com o e-mail se estiver marcado.
+- **Fechar a janela** mostra um aviso e deixa o programa na bandeja (dá para escolher "Sair do programa" e
+  marcar "Não perguntar de novo"). Para sair de vez, use **Sair** no menu do ícone.
+- **De tempo em tempo** (padrão: a cada 60 minutos, só fontes de segurança) ele coleta sozinho.
+- **Notificações**: um resumo das notícias novas e uma notificação para cada crítica (ou só as críticas, ou
+  nenhuma). Coletas que você mesmo pediu com a janela aberta não viram notificação: a janela já avisa.
+- **Um programa aberto por vez**: abrir de novo pelo atalho traz a janela que estava escondida.
+
+No Linux o ícone precisa de bandeja no ambiente gráfico (no GNOME, a extensão AppIndicator). Sem bandeja o
+programa não esconde a janela ao fechar.
 
 ## Fontes
 
@@ -274,8 +289,9 @@ monitor/
   cveinfo.py      EPSS, NVD, comparação de versões e página do CVE
   health.py       saúde das fontes e fontes silenciosas
   diagnostics.py  diagnóstico do programa
-  scheduler.py    agendamento da coleta e do modo residente
-  resident.py     modo residente (bandeja e notificações)
+  scheduler.py    agendamento da coleta e iniciar com o sistema
+  resident.py     bandeja, coleta de tempo em tempo e notificações
+  instance.py     um programa aberto por vez
   notify.py       Telegram, Discord e Teams
   oauth.py        login OAuth2 da Microsoft para o e-mail
   selfcheck.py    autoauditoria das bibliotecas (OSV)

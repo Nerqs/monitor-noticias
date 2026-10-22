@@ -7,7 +7,7 @@ Exemplos:
   python -m monitor --so-coletar --email   coleta e envia o resumo por e-mail
   python -m monitor --navegador     abre no navegador em vez da janela própria
   python -m monitor --diagnostico   confere se está tudo funcionando e diz o que corrigir
-  python -m monitor --residente     fica na bandeja e avisa quando surge algo crítico
+  python -m monitor --inicio-sistema  abre escondido na bandeja (usado ao entrar no sistema)
 """
 
 from __future__ import annotations
@@ -86,17 +86,6 @@ def self_test() -> int:
     return 0 if ok else 1
 
 
-def run_resident() -> int:
-    from .resident import Resident
-
-    app = web.create_app()
-    server, url = _serve(app)
-    try:
-        return Resident(url).run()
-    finally:
-        server.shutdown()
-
-
 def unblock_bundle() -> int:
     """Tira a marca "baixado da internet" das DLLs do executável no Windows.
 
@@ -120,12 +109,26 @@ def unblock_bundle() -> int:
     return removed
 
 
-def _open_window(url: str, on_start=None):
-    """Abre a janela própria (pywebview). Volta quando o usuário fecha a janela."""
+def _open_window(url: str, on_start=None, desktop=None, hidden: bool = False):
+    """Abre a janela própria (pywebview). Volta quando a janela fecha de vez."""
     unblock_bundle()
     import webview
 
-    window = webview.create_window("Monitor de notícias", url, width=1360, height=880, min_size=(900, 600))
+    window = webview.create_window("Monitor de notícias", url, width=1360, height=880, min_size=(900, 600),
+                                   hidden=hidden)
+    if desktop is not None:
+        desktop.window = window
+        window.events.closing += desktop.on_closing
+        window.events.minimized += lambda: setattr(desktop, "minimized", True)
+        window.events.restored += lambda: setattr(desktop, "minimized", False)
+
+        def on_start(window):
+            # Roda numa thread depois que a janela existe: liga a bandeja e o laço de coleta.
+            gtk = sys.platform.startswith("linux") and str(getattr(webview, "renderer", "")).startswith("gtk")
+            if not desktop.start_tray(gtk_main_loop=gtk) and hidden:
+                desktop.show_window()  # sem bandeja não dá para ficar escondido
+            desktop.start_loop()
+
     if on_start:
         webview.start(on_start, window)
     else:
@@ -142,24 +145,59 @@ def _finish(server, code: int) -> int:
     os._exit(code)
 
 
-def run_gui(collect: bool, use_browser: bool) -> int:
+def _desktop_hooks(desktop) -> dict:
+    """O que o programa aberto faz quando outra cópia dele (ou a própria janela) pede."""
+    return {
+        "show": lambda data: desktop.show_window(),
+        "hide": lambda data: desktop.hide_window(),
+        "quit": lambda data: desktop.quit(),
+        "collect": lambda data: desktop.collect_async(data.get("email"), scheduled=bool(data.get("scheduled"))),
+    }
+
+
+def run_gui(collect: bool, use_browser: bool, at_login: bool = False) -> int:
+    from . import config, instance
+    from .resident import Desktop
+
+    # Já aberto (talvez escondido na bandeja): só traz a janela de volta.
+    if instance.forward("show"):
+        print("O Monitor de notícias já está aberto; a janela dele foi trazida para a frente.")
+        return 0
+
     # O programa é um pequeno servidor em 127.0.0.1 (só este computador acessa,
     # com token). A janela própria, ou o navegador, só mostra as páginas dele.
     app = web.create_app()
     server, url = _serve(app)
     logging.info("leitor em %s", url)
+    instance.register(url, web.API_TOKEN)
+    desktop_cfg = config.load_config().get("desktop", {})
+    # Abriu agora: confere se a coleta agendada ficou para trás (computador desligado no horário).
+    desktop = Desktop(url, catch_up_now=not collect)
+    web.app_hooks.update(_desktop_hooks(desktop))
+    hidden = at_login and bool(desktop_cfg.get("start_hidden", True))
+    desktop.hidden = hidden
+    desktop.on_quit = lambda: _finish(server, 0)
     if collect:
         pipeline.run_in_background()
 
     if not use_browser:
         try:
-            _open_window(url)
-            return _finish(server, 0)  # janela fechada: fecha tudo junto
+            _open_window(url, desktop=desktop, hidden=hidden)
+            desktop.stop.set()
+            desktop.stop_tray()
+            return _finish(server, 0)  # janela fechada de vez: fecha tudo junto
         except Exception:  # sem pywebview ou sem motor gráfico (WebView2 no Windows, GTK/Qt no Linux)
             logging.exception("Janela própria indisponível; abrindo no navegador")
+            desktop.window = None
+
+    if hidden:
+        # Sem janela própria e iniciado com o sistema: fica só o ícone, que abre o navegador.
+        desktop.run_without_window()
+        return _finish(server, 0)
 
     # Modo navegador: encerra quando a última aba fecha (ou com Ctrl+C no terminal).
     print(f"Monitor de notícias aberto em {url}  (feche a aba ou use Ctrl+C para sair)")
+    desktop.start_loop()
     webbrowser.open(url)
     try:
         presence.wait_until_gone()
@@ -235,7 +273,9 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--email", action="store_true", help="com --so-coletar, envia o resumo por e-mail")
     parser.add_argument("--navegador", action="store_true", help="abre no navegador em vez da janela própria")
     parser.add_argument("--diagnostico", action="store_true", help="confere ambiente, rede, e-mail e banco")
-    parser.add_argument("--residente", action="store_true", help="fica na bandeja e avisa sobre falhas críticas")
+    parser.add_argument("--inicio-sistema", action="store_true",
+                        help="abre escondido na bandeja e coleta se a agendada ficou para trás")
+    parser.add_argument("--residente", action="store_true", help=argparse.SUPPRESS)  # nome antigo de --inicio-sistema
     parser.add_argument("--version", action="version", version=__version__)
     parser.add_argument("--autoteste", action="store_true", help=argparse.SUPPRESS)
     parser.add_argument("--testar-janela", action="store_true", help=argparse.SUPPRESS)
@@ -261,11 +301,15 @@ def main(argv: list[str] | None = None) -> int:
         from . import diagnostics
 
         return diagnostics.print_report()
-    if args.residente:
-        return run_resident()
     if args.so_coletar:
+        from . import instance
+
+        # Programa aberto na bandeja: ele mesmo coleta (e mostra a notificação).
+        if instance.forward("collect", email=args.email, scheduled=True):
+            print("O programa já está aberto: a coleta foi pedida para ele.")
+            return 0
         return run_headless(args.email)
-    return run_gui(args.coletar, args.navegador)
+    return run_gui(args.coletar, args.navegador, at_login=args.inicio_sistema or args.residente)
 
 
 if __name__ == "__main__":

@@ -682,6 +682,23 @@ def items_for_alert(flag: str, limit: int = 10) -> list[dict]:
     return [dict(r) for r in rows]
 
 
+def items_to_notify(limit: int = 300) -> list[dict]:
+    """Notícias novas (de qualquer nível) que ainda não viraram notificação na área de trabalho."""
+    rows = connect().execute(
+        "SELECT id, title, level, category, source_name, reasons, matched_tech, version_verdict FROM items "
+        "WHERE muted=0 AND notified=0 AND fetched_at >= datetime('now', '-2 days') ORDER BY score DESC LIMIT ?",
+        (limit,),
+    ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def mark_all_notified() -> None:
+    """Ao abrir o programa, o que já estava no banco não vira notificação."""
+    conn = connect()
+    conn.execute("UPDATE items SET notified=1 WHERE notified=0")
+    conn.commit()
+
+
 def items_for_chat(limit: int = 10) -> list[dict]:
     rows = connect().execute(
         "SELECT * FROM items WHERE muted=0 AND chatted=0 AND level IN ('critico','alto') AND category<>'games' "

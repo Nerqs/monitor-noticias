@@ -662,12 +662,37 @@ document.addEventListener("keydown", (ev) => {
 
 let pollTimer = null;
 
+const IDLE_POLL = 15000;  // parado: confere de vez em quando (coleta automática, agendada ou da bandeja)
+
+function setCollectBusy(p) {
+  const btn = $("#collect-btn");
+  const busy = !!p;
+  btn.disabled = busy;
+  btn.lastElementChild.textContent = busy ? "Coletando…" : "Coletar agora";
+  btn.classList.toggle("busy", busy);
+  $("#mobile-collect").classList.toggle("busy", busy);
+  $("#mobile-collect").disabled = busy;
+  $("#activity").classList.toggle("hidden", !busy);
+  if (!busy) { $("#collect-bar").style.width = "0"; return; }
+  const pct = p.total ? Math.round((p.done / p.total) * 100) : 0;
+  $("#collect-bar").style.width = pct + "%";
+  $("#activity-bar").style.width = pct + "%";
+  $("#activity").classList.toggle("indeterminate", !p.total || p.done >= p.total);
+  $("#activity-title").textContent = p.total && p.done < p.total ? "Coletando notícias…" : (p.message || "Preparando a coleta…");
+  $("#activity-detail").textContent = p.total
+    ? `${p.done} de ${p.total} fontes · ${p.new_items} novas` + (p.current.length ? ` · ${p.current.slice(0, 2).join(", ")}` : "")
+    : "Buscando nos sites cadastrados";
+}
+
 async function startCollect(sourceIds = null) {
+  // Mostra na hora: a resposta do programa pode demorar um pouco.
+  setCollectBusy({ total: 0, done: 0, new_items: 0, current: [], message: "Preparando a coleta…" });
   try {
     const res = await api("/api/collect", { method: "POST", body: sourceIds ? { source_ids: sourceIds } : {} });
     if (!res.started) toast("Já existe uma coleta em andamento.");
   } catch (e) {
     toast(e.message, true);
+    pollStatus();
     return;
   }
   pollStatus();
@@ -676,26 +701,18 @@ async function startCollect(sourceIds = null) {
 async function pollStatus() {
   clearTimeout(pollTimer);
   let data;
-  try { data = await api("/api/status"); } catch (_) { return; }
+  try { data = await api("/api/status"); } catch (_) { pollTimer = setTimeout(pollStatus, IDLE_POLL); return; }
   const p = data.progress;
-  const btn = $("#collect-btn");
   const status = $("#collect-status");
   if (p.running) {
     state.sawRunning = true;
-    btn.disabled = true;
-    btn.lastElementChild.textContent = "Coletando…";
-    btn.classList.add("busy");
-    const pct = p.total ? Math.round((p.done / p.total) * 100) : 0;
-    $("#collect-bar").style.width = pct + "%";
-    status.textContent = `${p.done} de ${p.total} fontes · ${p.new_items} novas` +
-      (p.current.length ? ` · ${p.current.slice(0, 2).join(", ")}` : "");
+    setCollectBusy(p);
+    status.textContent = p.total ? `${p.done} de ${p.total} fontes · ${p.new_items} novas` : (p.message || "Preparando a coleta…");
     pollTimer = setTimeout(pollStatus, 700);
     return;
   }
-  btn.disabled = false;
-  btn.lastElementChild.textContent = "Coletar agora";
-  btn.classList.remove("busy");
-  $("#collect-bar").style.width = "0";
+  setCollectBusy(null);
+  pollTimer = setTimeout(pollStatus, IDLE_POLL);
   const run = data.last_run;
   if (run && run.finished_at) {
     status.textContent = `Última coleta ${timeAgo(run.finished_at)} · ${run.new_items} novas`;
@@ -1606,6 +1623,24 @@ $("#opml-import").addEventListener("change", async (ev) => {
     toast(`${r.added} fontes adicionadas${r.skipped ? `, ${r.skipped} já existiam` : ""}.`);
   } catch (e) { toast(e.message, true); }
   ev.target.value = "";
+});
+
+// --- Fechar a janela (programa de computador) -------------------------------------
+
+// Chamado pelo programa quando o X da janela é clicado. Devolve true se mostrou o aviso.
+window.monitorAskClose = () => {
+  const dialog = $("#close-dialog");
+  if (dialog.open) return true;
+  $("#close-remember").checked = false;
+  dialog.returnValue = "";
+  dialog.showModal();
+  return true;
+};
+$("#close-dialog").addEventListener("close", () => {
+  const action = $("#close-dialog").returnValue;
+  if (action !== "hide" && action !== "quit") return;
+  api("/api/app", { method: "POST", body: { action, remember: $("#close-remember").checked } })
+    .catch((e) => toast(e.message, true));
 });
 
 // --- Início -----------------------------------------------------------------

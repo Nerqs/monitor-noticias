@@ -30,6 +30,14 @@ class Progress:
             self.failed = 0
             self.run_id = None
             self.message = ""
+            self.origin = ""
+
+    def begin(self, origin: str, message: str = "Preparando a coleta…"):
+        """Marca a coleta como em andamento (de uma vez, sem a tela ver "parada" no meio)."""
+        with self._lock:
+            self.running, self.total, self.done, self.current = True, 0, 0, []
+            self.new_items = self.failed = 0
+            self.run_id, self.message, self.origin = None, message, origin
 
     def snapshot(self) -> dict:
         with self._lock:
@@ -42,6 +50,7 @@ class Progress:
                 "failed": self.failed,
                 "run_id": self.run_id,
                 "message": self.message,
+                "origin": self.origin,
             }
 
     def update(self, **kwargs):
@@ -152,10 +161,19 @@ def summary_message(summary: dict) -> str:
     return f"{summary['new_items']} notícias novas, {summary['sources_failed']} fontes com erro."
 
 
-def run_collection(source_ids: list[str] | None = None, workers: int = 8) -> dict:
-    """Coleta todas as fontes ativas (ou só as indicadas)."""
+def run_collection(source_ids: list[str] | None = None, workers: int = 8, origin: str = "manual") -> dict:
+    """Coleta todas as fontes ativas (ou só as indicadas).
+
+    ``origin`` diz quem pediu (manual, agendada, automatica, bandeja): o programa
+    na bandeja usa isso para decidir se mostra a notificação.
+    """
     if not _run_lock.acquire(blocking=False):
         return {"error": "Já existe uma coleta em andamento."}
+    progress.begin(origin)
+    return _run_locked(source_ids, workers)
+
+
+def _run_locked(source_ids: list[str] | None, workers: int) -> dict:
     try:
         cfg = config.load_config()
         settings = cfg.get("collection", {})
@@ -163,8 +181,7 @@ def run_collection(source_ids: list[str] | None = None, workers: int = 8) -> dic
         if source_ids:
             sources = [s for s in sources if s["id"] in source_ids]
         run_id = db.start_run()
-        progress.reset()
-        progress.update(running=True, total=len(sources), run_id=run_id, message="Coletando…")
+        progress.update(total=len(sources), run_id=run_id, message="Coletando…")
 
         ok = failed = new_total = 0
         fetch_settings = {**settings, "http_cache": db.HttpCache()}
@@ -241,8 +258,11 @@ def after_collection(cfg: dict, summary: dict) -> None:
                 summary["chat_error"] = str(exc)
 
 
-def run_in_background(source_ids: list[str] | None = None) -> bool:
-    if progress.snapshot()["running"] or _run_lock.locked():
+def run_in_background(source_ids: list[str] | None = None, origin: str = "manual") -> bool:
+    # A coleta já conta como "em andamento" antes da thread começar: a tela
+    # consulta logo depois do clique e não pode achar que nada aconteceu.
+    if not _run_lock.acquire(blocking=False):
         return False
-    threading.Thread(target=run_collection, args=(source_ids,), daemon=True).start()
+    progress.begin(origin)
+    threading.Thread(target=_run_locked, args=(source_ids, 8), daemon=True).start()
     return True
