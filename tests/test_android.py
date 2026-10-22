@@ -1,3 +1,5 @@
+import os
+
 import pytest
 
 from monitor import config, diagnostics, fetchers, scheduler, secrets, web
@@ -15,7 +17,8 @@ def test_secrets_in_private_file(android, data_dir):
     assert secrets.keyring_available()
     assert secrets.set_secret("telegram_token", "123:abc")
     assert secrets.get_secret("telegram_token") == "123:abc"
-    assert (data_dir / "segredos.json").stat().st_mode & 0o077 == 0
+    if os.name == "posix":  # o Android é Linux; no Windows não há bits de permissão POSIX
+        assert (data_dir / "segredos.json").stat().st_mode & 0o077 == 0
     secrets.set_secret("telegram_token", None)
     assert secrets.get_secret("telegram_token") is None
 
