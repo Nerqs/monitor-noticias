@@ -40,6 +40,16 @@ jobs:
       - name: Testes
         run: python -m pytest -q
 
+      - name: Versão do programa igual à tag publicada
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: python
+        run: |
+          import os, pathlib, re
+          tag = os.environ["GITHUB_REF_NAME"].lstrip("v")
+          init = pathlib.Path("monitor/__init__.py")
+          init.write_text(re.sub(r'__version__ = "[^"]*"', f'__version__ = "{tag}"', init.read_text()))
+          print("versão", tag)
+
       - name: Gerar executável
         run: python empacotar.py
 
