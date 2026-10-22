@@ -3,11 +3,12 @@
 # O GitHub Actions faz isso sozinho (workflow "App Android").
 
 [tool.briefcase]
-project_name = "Monitor de notícias"
+project_name = "monitor-noticias"
 bundle = "io.github.nerqs"
 version = "0.2.0"
 url = "https://github.com/Nerqs/monitor-noticias"
-license.file = "LICENSE-APP.txt"
+license = "LicenseRef-Proprietary"
+license-files = ["LICENSE-APP.txt"]
 author = "Nerqs"
 author_email = "96776286+Nerqs@users.noreply.github.com"
 
@@ -16,7 +17,7 @@ formal_name = "Monitor de notícias"
 description = "Notícias de tecnologia e falhas críticas, priorizadas para a sua stack."
 long_description = "Coleta notícias de segurança e tecnologia, prioriza falhas críticas e mostra tudo num leitor próprio."
 icon = "android/icone"
-sources = ["monitor", "android/monitor_android"]
+sources = ["monitor", "android/monitornoticias"]
 requires = [
     "feedparser>=6.0",
     "httpx>=0.27",

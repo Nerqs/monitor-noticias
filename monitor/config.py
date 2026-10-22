@@ -35,7 +35,7 @@ _lock = threading.Lock()
 
 
 def is_android() -> bool:
-    """Rodando dentro do app Android (definido pelo monitor_android)."""
+    """Rodando dentro do app Android (definido pelo app em android/monitornoticias)."""
     return os.environ.get("MONITOR_PLATFORM") == "android"
 
 
