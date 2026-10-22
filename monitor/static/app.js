@@ -12,6 +12,9 @@ const state = {
   config: null,
   editingSource: null,
   lastRunId: null,
+  sawRunning: false,
+  unreadOnly: true,
+  loadSeq: 0,
 };
 
 // --- Utilidades -------------------------------------------------------------
@@ -196,23 +199,37 @@ $$(".nav-item").forEach((btn) => {
 
 // --- Leitor -----------------------------------------------------------------
 
+const isFavoritesView = (view) => ["favoritos", "games_favoritos"].includes(view);
+const FILTER_DEFAULTS = { days: "0", "level-filter": "", "source-select": "", sort: "" };
+
 async function loadItems() {
+  // Só a resposta do pedido mais recente vale: uma resposta atrasada de outra aba
+  // ou filtro não pode trocar a lista que está na tela.
+  const seq = ++state.loadSeq;
+  updateFilterUI();
   const params = new URLSearchParams({
     view: state.view,
     q: $("#search").value,
-    unread: $("#unread-only").checked && !["favoritos", "games_favoritos"].includes(state.view) ? "1" : "0",
+    unread: state.unreadOnly && !isFavoritesView(state.view) ? "1" : "0",
     days: $("#days").value,
     sort: $("#sort").value,
     level: $("#level-filter").value,
     source: $("#source-select").value,
   });
+  let prefs = state.prefs, items;
   try {
-    if (["paravoce", "games_paravoce"].includes(state.view)) state.prefs = await api(`/api/preferences?area=${areaOfView(state.view)}`);
-    state.items = await api(`/api/items?${params}`);
+    if (["paravoce", "games_paravoce"].includes(state.view)) prefs = await api(`/api/preferences?area=${areaOfView(state.view)}`);
+    items = await api(`/api/items?${params}`);
   } catch (e) {
-    toast(e.message, true);
+    if (seq !== state.loadSeq) return;
+    $("#item-list").innerHTML = `<div class="list-empty">${icon("error")}<p>Não foi possível carregar as notícias.</p>
+      <p class="small">${esc(e.message)}</p><button class="btn small" id="list-retry">${icon("refresh")}Tentar de novo</button></div>`;
+    $("#list-retry").onclick = loadItems;
     return;
   }
+  if (seq !== state.loadSeq) return;
+  state.prefs = prefs;
+  state.items = items;
   renderList();
   loadCounts();
   $("#list-title").textContent = VIEW_TITLES[state.view];
@@ -237,9 +254,10 @@ function renderList() {
     $("#cve-hint").onclick = () => { state.selectedId = null; showCve(cveSearch[0].toUpperCase()); };
   }
   if (!state.items.length) {
-    const hint = $("#unread-only").checked ? "Nada novo por aqui. Desmarque \"Só não lidas\" para ver tudo." :
-      "Nenhuma notícia. Clique em \"Coletar agora\".";
-    list.innerHTML = `<div class="list-empty">${esc(hint)}</div>`;
+    list.innerHTML = emptyState();
+    $("#empty-all")?.addEventListener("click", () => setUnreadOnly(false));
+    $("#empty-clear")?.addEventListener("click", clearFilters);
+    $("#empty-collect")?.addEventListener("click", () => startCollect());
     return;
   }
   list.insertAdjacentHTML("beforeend", state.items.map((item) => `
@@ -249,6 +267,65 @@ function renderList() {
     </div>`).join(""));
   $$(".item", list).forEach((el) => el.addEventListener("click", () => selectItem(Number(el.dataset.id))));
 }
+
+function emptyState() {
+  const searching = $("#search").value.trim() !== "";
+  if (searching || filtersActive()) {
+    return `<div class="list-empty">${icon("search")}<p><b>Nada com esses filtros.</b></p>
+      <p class="small">Tente outra busca ou volte os filtros ao padrão.</p>
+      <button class="btn small" id="empty-clear">Limpar filtros</button></div>`;
+  }
+  if (state.unreadOnly && !isFavoritesView(state.view)) {
+    return `<div class="list-empty">${icon("check")}<p><b>Tudo lido por aqui.</b></p>
+      <p class="small">Não há notícias novas nesta lista.</p>
+      <button class="btn small" id="empty-all">Mostrar também as lidas</button></div>`;
+  }
+  if (isFavoritesView(state.view)) {
+    return `<div class="list-empty">${icon("star")}<p><b>Nenhum favorito ainda.</b></p>
+      <p class="small">Use a estrela (ou a tecla <kbd>s</kbd>) numa notícia para guardá-la aqui.</p></div>`;
+  }
+  return `<div class="list-empty">${icon("inbox")}<p><b>Nenhuma notícia.</b></p>
+    <button class="btn small primary" id="empty-collect">${icon("refresh")}Coletar agora</button></div>`;
+}
+
+// --- Filtros ----------------------------------------------------------------
+
+function filtersActive() {
+  return Object.entries(FILTER_DEFAULTS).some(([id, value]) => $(`#${id}`).value !== value);
+}
+
+function updateFilterUI() {
+  const favorites = isFavoritesView(state.view);
+  const seg = $("#read-filter");
+  seg.classList.toggle("disabled", favorites);
+  seg.title = favorites ? "Favoritos mostram lidas e não lidas." : "";
+  $$("button", seg).forEach((b) => {
+    const on = !favorites && (b.dataset.unread === "1") === state.unreadOnly;
+    b.classList.toggle("on", on);
+    b.setAttribute("aria-checked", on ? "true" : "false");
+  });
+  for (const [id, value] of Object.entries(FILTER_DEFAULTS)) {
+    $(`#${id}`).closest(".chip-select").classList.toggle("active", $(`#${id}`).value !== value);
+  }
+  $("#filters-clear").classList.toggle("hidden", !filtersActive() && !$("#search").value);
+}
+
+function setUnreadOnly(on, reload = true) {
+  state.unreadOnly = on;
+  if (reload) loadItems();
+  else updateFilterUI();
+}
+
+function clearFilters() {
+  for (const [id, value] of Object.entries(FILTER_DEFAULTS)) $(`#${id}`).value = value;
+  $("#search").value = "";
+  loadItems();
+}
+
+$$("#read-filter button").forEach((b) => b.addEventListener("click", () => {
+  if (!isFavoritesView(state.view)) setUnreadOnly(b.dataset.unread === "1");
+}));
+$("#filters-clear").addEventListener("click", clearFilters);
 
 async function renderEmptyReader() {
   let counts = {}, status = {}, healthInfo = {};
@@ -450,7 +527,6 @@ async function loadCounts() {
 
 let searchTimer;
 $("#search").addEventListener("input", () => { clearTimeout(searchTimer); searchTimer = setTimeout(loadItems, 250); });
-$("#unread-only").addEventListener("change", loadItems);
 $("#days").addEventListener("change", loadItems);
 $("#sort").addEventListener("change", loadItems);
 $("#level-filter").addEventListener("change", loadItems);
@@ -486,7 +562,7 @@ function renderSourceSelect() {
 function applyArea() {
   const games = isGamesView(state.view);
   $(".app").classList.toggle("area-games", games);
-  $("#level-filter").classList.toggle("hidden", games);
+  $("#level-chip").classList.toggle("hidden", games);
   if (games) $("#level-filter").value = "";
   renderSourceSelect();
 }
@@ -545,6 +621,7 @@ async function pollStatus() {
   const btn = $("#collect-btn");
   const status = $("#collect-status");
   if (p.running) {
+    state.sawRunning = true;
     btn.disabled = true;
     btn.lastElementChild.textContent = "Coletando…";
     btn.classList.add("busy");
@@ -563,13 +640,16 @@ async function pollStatus() {
   if (run && run.finished_at) {
     status.textContent = `Última coleta ${timeAgo(run.finished_at)} · ${run.new_items} novas`;
     $("#error-count").textContent = run.sources_failed ? run.sources_failed : "";
-    if (state.lastRunId !== null && state.lastRunId !== run.id) {
+    // Recarrega a lista quando termina uma coleta, inclusive a que já estava
+    // rodando quando o programa abriu (agendada ou com --coletar).
+    if (state.sawRunning || (state.lastRunId !== null && state.lastRunId !== run.id)) {
       toast(p.message || `${run.new_items} notícias novas.`, false);
       if (state.page === "reader") loadItems();
       if (state.page === "erros") loadErrors();
       if (state.page === "fontes") loadSources();
     }
     state.lastRunId = run.id;
+    state.sawRunning = false;
   } else {
     status.textContent = "Nenhuma coleta ainda.";
     state.lastRunId = 0;
@@ -1280,8 +1360,7 @@ $("#see-muted").addEventListener("click", (ev) => {
   state.selectedId = null;
   applyArea();
   showPage("reader");
-  $("#unread-only").checked = false;
-  loadItems();
+  setUnreadOnly(false);
   renderEmptyReader();
 });
 
