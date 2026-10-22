@@ -2,6 +2,7 @@
 
 import hashlib
 import io
+import os
 import sys
 import tarfile
 
@@ -89,7 +90,9 @@ def test_linux_replaces_executable(monkeypatch, github, launched, tmp_path):
     monkeypatch.setattr(sys, "executable", str(exe))
     github(release_with("MonitorNoticias-linux.tar.gz", buf.getvalue()))
     updates.apply()
-    assert exe.read_bytes() == b"novo" and exe.stat().st_mode & 0o111
+    assert exe.read_bytes() == b"novo"
+    if os.name == "posix":  # no Windows não existe bit de execução
+        assert exe.stat().st_mode & 0o111
     assert launched[0][:2] == ["sh", "-c"] and launched[0][3] == str(exe)
 
 
