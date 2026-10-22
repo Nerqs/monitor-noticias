@@ -4,6 +4,9 @@ Níveis:
   critico  nota >= 70  (ex.: falha já explorada, CVSS 9+, zero-day)
   alto     nota >= 40  (ex.: vulnerabilidade que afeta suas tecnologias)
   normal   o resto
+
+Notícias de games têm regras próprias (``score_game``): nunca são "crítico";
+"alto" ali quer dizer destaque (lançamento, jogo grátis, evento, jogo que você segue).
 """
 
 from __future__ import annotations
@@ -30,6 +33,8 @@ def matches(terms: list[str], text: str) -> list[str]:
 
 def score_item(item: dict, category: str, config: dict) -> dict:
     """Devolve ``score``, ``level``, ``matched_tech`` e ``reasons`` para o item."""
+    if category == "games":
+        return score_game(item, config)
     text = " ".join([item.get("title", ""), item.get("summary", ""), item.get("extra_text", "")])
     priority = config.get("priority", {})
     techs = config.get("interests", {}).get("technologies", [])
@@ -78,6 +83,31 @@ def score_item(item: dict, category: str, config: dict) -> dict:
         "matched_tech": ",".join(tech_hits),
         "reasons": " · ".join(reasons),
     }
+
+
+def score_game(item: dict, config: dict) -> dict:
+    """Nota de uma notícia de games. ``matched_tech`` guarda os jogos que você segue."""
+    text = " ".join([item.get("title", ""), item.get("summary", "")])
+    games = config.get("games", {})
+    score, reasons = 0, []
+    highlight = matches(games.get("highlight_keywords", []), text)
+    if highlight:
+        score += 40
+        reasons.append("Destaque: " + ", ".join(highlight[:4]))
+    following = matches(games.get("following", []), text)
+    if following:
+        score += 40
+        reasons.append("Você acompanha: " + ", ".join(following))
+    return {
+        "score": score,
+        "level": game_level(score),
+        "matched_tech": ",".join(following),
+        "reasons": " · ".join(reasons),
+    }
+
+
+def game_level(score: int) -> str:
+    return "alto" if score >= HIGH_LEVEL else "normal"
 
 
 def level_for(score: int) -> str:
@@ -132,4 +162,5 @@ def finalize(item: dict, config: dict) -> dict:
         score -= 25
         reasons.append(f"Sua versão não é afetada: {item.get('version_note')}")
 
-    return {"score": score, "level": level_for(score), "reasons": " · ".join(reasons), "muted": muted}
+    level = game_level(score) if item.get("category") == "games" else level_for(score)
+    return {"score": score, "level": level, "reasons": " · ".join(reasons), "muted": muted}

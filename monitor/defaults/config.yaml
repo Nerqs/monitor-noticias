@@ -52,6 +52,35 @@ priority:
     - malware
     - exploit
 
+games:
+  # Área de games: fica separada das notícias de tecnologia (abas, curtidas e e-mail próprios).
+  # Jogos, séries e plataformas que você acompanha. Notícias que citam estes termos vão para "Meus jogos".
+  following: []
+  # Termos que colocam a notícia em "Destaques" (lançamentos, jogos grátis, eventos).
+  highlight_keywords:
+    - grátis
+    - de graça
+    - free to keep
+    - free games
+    - jogos grátis
+    - game pass
+    - ps plus
+    - data de lançamento
+    - release date
+    - lançamento
+    - anunciado
+    - announced
+    - revealed
+    - trailer
+    - state of play
+    - nintendo direct
+    - xbox showcase
+    - the game awards
+    - summer game fest
+    - gamescom
+  email: true              # manda um resumo de games num e-mail separado (junto com o de tecnologia)
+  max_items_per_section: 15
+
 email:
   provider: outlook       # outlook | office365 | gmail | yahoo | custom
   auth: password          # password | oauth_microsoft

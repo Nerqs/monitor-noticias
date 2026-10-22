@@ -82,11 +82,20 @@ const icon = (name) => `<svg class="icon"><use href="#i-${name}"/></svg>`;
 const VIEW_TITLES = {
   criticos: "Críticos", minhas: "Minhas tecnologias", paravoce: "Para você", seguranca: "Segurança",
   tecnologia: "Tecnologia", favoritos: "Favoritos", todos: "Todas as notícias", silenciadas: "Silenciadas",
+  games_destaques: "Destaques de games", games_meus: "Meus jogos", games_paravoce: "Games para você",
+  games_favoritos: "Games favoritos", games: "Todas de games",
 };
+
+// Games ficam numa área separada: abas, fontes e curtidas próprias.
+const isGamesView = (view) => view.startsWith("games");
+const areaOfView = (view) => (isGamesView(view) ? "games" : "tech");
+const isGame = (item) => item.category === "games";
 
 function badges(item) {
   let html = "";
-  if (item.level === "critico") html += '<span class="badge critico">CRÍTICO</span>';
+  if (isGame(item)) {
+    if (item.level !== "normal") html += '<span class="badge destaque">DESTAQUE</span>';
+  } else if (item.level === "critico") html += '<span class="badge critico">CRÍTICO</span>';
   else if (item.level === "alto") html += '<span class="badge alto">ALTO</span>';
   if (item.kev) html += '<span class="badge kev" title="Catálogo de falhas exploradas da CISA">EXPLORADA</span>';
   if (item.version_verdict === "afeta") {
@@ -101,7 +110,7 @@ function badges(item) {
     html += `<span class="badge like" title="Afinidade com o que você curtiu">♥ ${Math.round(item.affinity)}%</span>`;
   }
   if (item.matched_tech) {
-    for (const t of item.matched_tech.split(",")) html += `<span class="badge tech">${esc(t)}</span>`;
+    for (const t of item.matched_tech.split(",")) html += `<span class="badge ${isGame(item) ? "game" : "tech"}">${esc(t)}</span>`;
   }
   return html;
 }
@@ -174,6 +183,7 @@ $$(".nav-item").forEach((btn) => {
     if (btn.dataset.view) {
       state.view = btn.dataset.view;
       state.selectedId = null;
+      applyArea();
       setReading(false);
       showPage("reader");
       loadItems();
@@ -190,14 +200,14 @@ async function loadItems() {
   const params = new URLSearchParams({
     view: state.view,
     q: $("#search").value,
-    unread: $("#unread-only").checked && state.view !== "favoritos" ? "1" : "0",
+    unread: $("#unread-only").checked && !["favoritos", "games_favoritos"].includes(state.view) ? "1" : "0",
     days: $("#days").value,
     sort: $("#sort").value,
     level: $("#level-filter").value,
     source: $("#source-select").value,
   });
   try {
-    if (state.view === "paravoce") state.prefs = await api("/api/preferences");
+    if (["paravoce", "games_paravoce"].includes(state.view)) state.prefs = await api(`/api/preferences?area=${areaOfView(state.view)}`);
     state.items = await api(`/api/items?${params}`);
   } catch (e) {
     toast(e.message, true);
@@ -213,7 +223,7 @@ async function loadItems() {
 
 function renderList() {
   const list = $("#item-list");
-  if (state.view === "paravoce" && state.prefs && !state.prefs.active) {
+  if (["paravoce", "games_paravoce"].includes(state.view) && state.prefs && !state.prefs.active) {
     const left = state.prefs.min_likes - state.prefs.likes;
     list.innerHTML = `<div class="list-hint">${icon("sparkle")}<span>Use <b>Gostei</b> em mais ${left} notícia${left > 1 ? "s" : ""}
       para o programa aprender seu gosto. Até lá, esta lista segue a ordem de prioridade.</span></div>`;
@@ -233,7 +243,7 @@ function renderList() {
     return;
   }
   list.insertAdjacentHTML("beforeend", state.items.map((item) => `
-    <div class="item lvl-${item.level} ${item.is_read ? "" : "unread"} ${item.id === state.selectedId ? "selected" : ""}" data-id="${item.id}">
+    <div class="item lvl-${item.level} ${isGame(item) ? "game" : ""} ${item.is_read ? "" : "unread"} ${item.id === state.selectedId ? "selected" : ""}" data-id="${item.id}">
       <div class="meta">${badges(item)}<span>${esc(item.source_name)}</span><span>·</span><span>${esc(timeAgo(item.published))}</span>${item.starred ? '<span class="star">★</span>' : ""}</div>
       <div class="title">${esc(item.title)}</div>
     </div>`).join(""));
@@ -254,15 +264,20 @@ async function renderEmptyReader() {
   $("#read-pane").innerHTML = `
     <div class="overview">
       <p class="eyebrow">${esc(capitalize(new Date().toLocaleDateString("pt-BR", { weekday: "long", day: "numeric", month: "long" })))}</p>
-      <h1>${greeting}.</h1>
+      <h1>${greeting}.${isGamesView(state.view) ? ' <span class="muted">Games</span>' : ""}</h1>
       <p class="muted">${run && run.finished_at ? `Última coleta ${timeAgo(run.finished_at)}, com ${run.new_items} notícias novas.` :
         "Nenhuma coleta feita ainda. Clique em <b>Coletar agora</b> para começar."}</p>
-      <div class="tiles">
+      <div class="tiles">${isGamesView(state.view) ? `
+        ${tile(counts.games_destaques, "destaques de games não lidos", "games_destaques", "game")}
+        ${tile(counts.games_meus, "dos jogos que você acompanha", "games_meus", "accent")}
+        ${tile(counts.games, "notícias de games não lidas", "games")}
+        ${counts.games_paravoce ? tile(counts.games_paravoce, "parecidas com o que você curtiu", "games_paravoce", "like") : ""}` : `
         ${tile(counts.criticos, "críticas e importantes não lidas", "criticos", "danger")}
         ${tile(counts.minhas, "citam suas tecnologias", "minhas", "accent")}
         ${tile(counts.seguranca, "de segurança não lidas", "seguranca")}
         ${tile(counts.tecnologia, "de tecnologia não lidas", "tecnologia")}
         ${counts.paravoce ? tile(counts.paravoce, "parecidas com o que você curtiu", "paravoce", "like") : ""}
+        ${counts.games ? tile(counts.games, "notícias de games não lidas (área Games)", "games", "game") : ""}`}
       </div>
       ${run && run.sources_failed ? `<button class="notice" data-page-goto="erros">${icon("error")}
         <span><b>${run.sources_failed} fonte${run.sources_failed > 1 ? "s" : ""} com erro</b> na última coleta. Ver detalhes</span></button>` : ""}
@@ -295,7 +310,9 @@ async function selectItem(id) {
 function renderItem(item) {
   const cves = (item.cves || "").split(",").filter(Boolean);
   const related = item.related || [];
-  const levelLabel = { critico: "Prioridade crítica", alto: "Prioridade alta", normal: "Por que está aqui" }[item.level];
+  const levelLabel = isGame(item) ? (item.level === "normal" ? "Por que está aqui" : "Destaque") :
+    { critico: "Prioridade crítica", alto: "Prioridade alta", normal: "Por que está aqui" }[item.level];
+  const reasonsClass = isGame(item) && item.level !== "normal" ? "game" : `lvl-${item.level}`;
   $("#read-pane").innerHTML = `
     <div class="read-toolbar">
       ${backButton()}
@@ -314,7 +331,7 @@ function renderItem(item) {
         ${item.epss != null && item.epss < 0.1 ? `<span title="Chance de exploração nos próximos 30 dias">· EPSS ${(item.epss * 100).toFixed(1)}%</span>` : ""}</div>
       <h1>${esc(item.title)}</h1>
       ${cves.length ? `<div class="meta">${cves.map((c) => `<a class="cve" href="#" data-cve="${esc(c)}" title="Tudo sobre ${esc(c)}">${esc(c)}</a>`).join(" ")}</div>` : ""}
-      ${item.reasons ? `<div class="reasons lvl-${item.level}"><b>${levelLabel}</b><span>${esc(item.reasons)}</span></div>` : ""}
+      ${item.reasons ? `<div class="reasons ${reasonsClass}"><b>${levelLabel}</b><span>${esc(item.reasons)}</span></div>` : ""}
       ${item.affinity_terms && item.affinity_terms.length && item.liked !== -1 ? `<div class="affinity-note">${icon("sparkle")}
         <span>Parecida com o que você curtiu: ${item.affinity_terms.map(esc).join(", ")}</span></div>` : ""}
       ${item.summary ? `<div class="summary">${esc(item.summary)}</div>` : ""}
@@ -447,13 +464,31 @@ async function fillSourceSelects() {
     state.health = data.health;
     state.silent = data.silent;
   } catch (_) { return; }
-  const options = state.sources.map((s) => `<option value="${esc(s.id)}">${esc(s.name)}</option>`).join("");
-  for (const sel of ["#source-select", "#rule-source"]) {
-    const el = $(sel);
-    const keep = el.value;
-    el.innerHTML = el.firstElementChild.outerHTML + options;
-    el.value = keep;
-  }
+  const option = (s) => `<option value="${esc(s.id)}">${esc(s.name)}</option>`;
+  const rule = $("#rule-source");
+  const keep = rule.value;
+  rule.innerHTML = rule.firstElementChild.outerHTML + state.sources.map(option).join("");
+  rule.value = keep;
+  renderSourceSelect();
+}
+
+// O filtro de fonte do leitor só mostra as fontes da área aberta (tecnologia ou games).
+function renderSourceSelect() {
+  const el = $("#source-select");
+  const keep = el.value;
+  const games = isGamesView(state.view);
+  const sources = (state.sources || []).filter((s) => (s.category === "games") === games);
+  el.innerHTML = el.firstElementChild.outerHTML +
+    sources.map((s) => `<option value="${esc(s.id)}">${esc(s.name)}</option>`).join("");
+  el.value = sources.some((s) => s.id === keep) ? keep : "";
+}
+
+function applyArea() {
+  const games = isGamesView(state.view);
+  $(".app").classList.toggle("area-games", games);
+  $("#level-filter").classList.toggle("hidden", games);
+  if (games) $("#level-filter").value = "";
+  renderSourceSelect();
 }
 $("#mark-all").addEventListener("click", async () => {
   const res = await api("/api/items/mark-all-read", { method: "POST", body: { view: state.view } });
@@ -635,7 +670,7 @@ async function showCve(cveId, fromItem = null) {
 // --- Fontes -----------------------------------------------------------------
 
 const TYPE_LABELS = { rss: "RSS", scrape: "Raspagem", cisa_kev: "CISA KEV", nvd: "NVD", github_advisories: "GitHub" };
-const CATEGORY_LABELS = { seguranca: "Segurança", tecnologia: "Tecnologia" };
+const CATEGORY_LABELS = { seguranca: "Segurança", tecnologia: "Tecnologia", games: "Games" };
 
 async function loadSources() {
   try {
@@ -653,7 +688,9 @@ async function loadSources() {
 
 function renderSources() {
   const filter = $("#source-filter").value.toLowerCase();
-  const rows = state.sources.filter((s) => !filter || `${s.name} ${s.url}`.toLowerCase().includes(filter));
+  const area = $("#source-area").value;
+  const rows = state.sources.filter((s) => (!filter || `${s.name} ${s.url}`.toLowerCase().includes(filter)) &&
+    (!area || (s.category === "games") === (area === "games")));
   $("#sources-table tbody").innerHTML = rows.map((s) => {
     const streak = state.streaks[s.id] || 0;
     const silent = (state.silent || []).includes(s.id);
@@ -707,6 +744,7 @@ function renderSources() {
 }
 
 $("#source-filter").addEventListener("input", renderSources);
+$("#source-area").addEventListener("change", renderSources);
 $("#add-source").addEventListener("click", () => openSourceDialog(null));
 
 const sourceForm = $("#source-form");
@@ -719,7 +757,7 @@ function openSourceDialog(source) {
   $("#discover-url").value = "";
   $("#discover-result").innerHTML = "";
   $("#source-test-result").innerHTML = "";
-  const s = source || { type: "rss", category: "tecnologia", language: "pt", enabled: true };
+  const s = source || { type: "rss", category: $("#source-area").value === "games" ? "games" : "tecnologia", language: "pt", enabled: true };
   for (const f of SOURCE_FIELDS) sourceForm.elements[f].value = s[f] || "";
   sourceForm.elements.type.value = s.type || "rss";
   sourceForm.elements.category.value = s.category || "tecnologia";
@@ -881,6 +919,7 @@ async function loadConfig() {
   }
   if (!state.sources.length) await fillSourceSelects();
   renderTechs();
+  renderGames();
   renderVersions();
   renderRules();
   renderChat();
@@ -894,9 +933,13 @@ async function loadConfig() {
 }
 
 async function loadPreferences() {
-  const box = $("#pref-status");
+  for (const area of ["tech", "games"]) loadAreaPreferences(area);
+}
+
+async function loadAreaPreferences(area) {
+  const box = $(area === "games" ? "#pref-status-games" : "#pref-status");
   let p;
-  try { p = await api("/api/preferences"); } catch (_) { return; }
+  try { p = await api(`/api/preferences?area=${area}`); } catch (_) { return; }
   const counts = `<b>${p.likes}</b> curtida${p.likes === 1 ? "" : "s"} · <b>${p.dislikes}</b> não curtida${p.dislikes === 1 ? "" : "s"}`;
   box.innerHTML = p.active ?
     `<p>${counts}. O ranking "Para você" está <b class="status-ok">ativo</b>.</p>` +
@@ -905,9 +948,15 @@ async function loadPreferences() {
 }
 
 $("#pref-reset").addEventListener("click", async () => {
-  if (!confirm("Apagar todas as curtidas e o que o programa aprendeu com elas?")) return;
-  await api("/api/preferences/reset", { method: "POST" });
-  toast("Preferências apagadas.");
+  if (!confirm("Apagar as curtidas de tecnologia e o que o programa aprendeu com elas?")) return;
+  await api("/api/preferences/reset", { method: "POST", body: { area: "tech" } });
+  toast("Preferências de tecnologia apagadas.");
+  loadPreferences();
+});
+$("#pref-reset-games").addEventListener("click", async () => {
+  if (!confirm("Apagar as curtidas de games e o que o programa aprendeu com elas?")) return;
+  await api("/api/preferences/reset", { method: "POST", body: { area: "games" } });
+  toast("Preferências de games apagadas.");
   loadPreferences();
 });
 
@@ -930,6 +979,29 @@ function addTech() {
   input.value = "";
   renderTechs();
 }
+function renderGames() {
+  const games = state.config.games = state.config.games || {};
+  const list = games.following = games.following || [];
+  $("#game-tags").innerHTML = list.map((t, i) => `<span class="tag">${esc(t)}<button data-i="${i}" title="Remover">×</button></span>`).join("") ||
+    '<span class="muted small">Nenhum jogo cadastrado.</span>';
+  $$("#game-tags button").forEach((b) => b.onclick = () => {
+    list.splice(Number(b.dataset.i), 1);
+    renderGames();
+  });
+}
+
+function addGame() {
+  const input = $("#game-input");
+  const list = state.config.games.following = state.config.games.following || [];
+  for (const t of input.value.split(",").map((s) => s.trim().toLowerCase()).filter(Boolean)) {
+    if (!list.includes(t)) list.push(t);
+  }
+  input.value = "";
+  renderGames();
+}
+$("#game-add").addEventListener("click", addGame);
+$("#game-input").addEventListener("keydown", (ev) => { if (ev.key === "Enter") { ev.preventDefault(); addGame(); } });
+
 $("#tech-add").addEventListener("click", addTech);
 $("#tech-input").addEventListener("keydown", (ev) => { if (ev.key === "Enter") { ev.preventDefault(); addTech(); } });
 
@@ -995,7 +1067,11 @@ async function emailAction(path, body, okMessage) {
 }
 
 $("#email-test").addEventListener("click", () => emailAction("/api/email/test", {}, () => "E-mail de teste enviado."));
-$("#email-send").addEventListener("click", () => emailAction("/api/email/send", {}, (r) => `Resumo enviado com ${r.items} notícias.`));
+$("#email-send").addEventListener("click", () => emailAction("/api/email/send", {}, (r) =>
+  `Resumo enviado com ${r.items} notícias${r.emails > 1 ? " (dois e-mails: tecnologia e games)" : ""}.`));
+$("#email-preview-games").addEventListener("click", () => {
+  window.open(`/email/preview?t=${encodeURIComponent(TOKEN)}&all=1&area=games`, "_blank", "width=720,height=900");
+});
 $("#email-preview").addEventListener("click", () => {
   window.open(`/email/preview?t=${encodeURIComponent(TOKEN)}&all=1`, "_blank", "width=720,height=900");
 });
@@ -1202,6 +1278,7 @@ $("#see-muted").addEventListener("click", (ev) => {
   ev.preventDefault();
   state.view = "silenciadas";
   state.selectedId = null;
+  applyArea();
   showPage("reader");
   $("#unread-only").checked = false;
   loadItems();

@@ -21,7 +21,14 @@ PACKAGE_DIR = Path(__file__).resolve().parent
 DEFAULTS_DIR = PACKAGE_DIR / "defaults"
 
 SOURCE_TYPES = ["rss", "cisa_kev", "nvd", "github_advisories", "scrape"]
-CATEGORIES = ["seguranca", "tecnologia"]
+CATEGORIES = ["seguranca", "tecnologia", "games"]
+GAMES = "games"  # categoria da área de games, separada das notícias de tecnologia
+
+
+def area_of(category: str | None) -> str:
+    """Área do leitor: "games" ou "tech" (segurança e tecnologia ficam juntas)."""
+    return "games" if category == GAMES else "tech"
+
 
 EMAIL_PRESETS = {
     "outlook": {"smtp_host": "smtp-mail.outlook.com", "smtp_port": 587, "security": "starttls"},
@@ -107,14 +114,41 @@ def save_config(config: dict) -> None:
 
 # --- Fontes ---------------------------------------------------------------
 
+# Pacotes de fontes padrão que chegaram depois da primeira versão. Quem já tem
+# um sources.yaml recebe cada pacote uma vez só; se depois remover uma fonte
+# dele, ela não volta.
+SEEDS = {"games": lambda source: source.get("category") == GAMES}
+
+
+def _seed(data: dict) -> bool:
+    seeded = list(data.get("seeded") or [])
+    missing = [name for name in SEEDS if name not in seeded]
+    if not missing:
+        return False
+    defaults = _read_yaml(DEFAULTS_DIR / "sources.yaml").get("sources", [])
+    sources = data.setdefault("sources", [])
+    existing = {s.get("id") for s in sources}
+    for name in missing:
+        sources += [copy.deepcopy(s) for s in defaults if SEEDS[name](s) and s["id"] not in existing]
+        seeded.append(name)
+    data["seeded"] = seeded
+    return True
+
+
 def load_sources() -> list[dict]:
     with _lock:
-        return _read_yaml(_user_file("sources.yaml")).get("sources", [])
+        path = _user_file("sources.yaml")
+        data = _read_yaml(path)
+        if _seed(data):
+            _write_yaml(path, data)
+        return data.get("sources", [])
 
 
 def save_sources(sources: list[dict]) -> None:
     with _lock:
-        _write_yaml(_user_file("sources.yaml"), {"sources": sources})
+        path = _user_file("sources.yaml")
+        seeded = _read_yaml(path).get("seeded") or []
+        _write_yaml(path, {"sources": sources, "seeded": seeded})
 
 
 def slugify(text: str) -> str:

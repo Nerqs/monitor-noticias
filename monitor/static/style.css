@@ -27,6 +27,8 @@
   --star: #f59e0b;
   --like: #db2777;
   --like-soft: #fdf2f8;
+  --game: #7c3aed;
+  --game-soft: #f5f3ff;
   --selected: #eef3ff;
   --shadow-sm: 0 1px 2px rgba(15, 23, 42, .06);
   --shadow: 0 1px 3px rgba(15, 23, 42, .08), 0 4px 12px rgba(15, 23, 42, .04);
@@ -45,7 +47,7 @@
     --text: #e5e9f0; --text-2: #c3cad6; --muted: #8590a3; --border: #222b3a; --border-strong: #2f3a4d;
     --accent: #6d9dff; --accent-soft: #17233d; --accent-text: #0b1020; --selected: #18233a;
     --critical: #f87171; --critical-soft: #2a1414; --high: #fb923c; --high-soft: #2a1b10; --kev: #a78bfa;
-    --ok: #4ade80; --like: #f472b6; --like-soft: #2a1322; --shadow-sm: none; --shadow: none; color-scheme: dark;
+    --ok: #4ade80; --like: #f472b6; --like-soft: #2a1322; --game: #a78bfa; --game-soft: #1f1835; --shadow-sm: none; --shadow: none; color-scheme: dark;
   }
 }
 :root[data-theme="dark"] {
@@ -54,7 +56,7 @@
   --text: #e5e9f0; --text-2: #c3cad6; --muted: #8590a3; --border: #222b3a; --border-strong: #2f3a4d;
   --accent: #6d9dff; --accent-soft: #17233d; --accent-text: #0b1020; --selected: #18233a;
   --critical: #f87171; --critical-soft: #2a1414; --high: #fb923c; --high-soft: #2a1b10; --kev: #a78bfa;
-  --ok: #4ade80; --like: #f472b6; --like-soft: #2a1322; --shadow-sm: none; --shadow: none; color-scheme: dark;
+  --ok: #4ade80; --like: #f472b6; --like-soft: #2a1322; --game: #a78bfa; --game-soft: #1f1835; --shadow-sm: none; --shadow: none; color-scheme: dark;
 }
 
 * { box-sizing: border-box; }
@@ -368,3 +370,17 @@ body.android .desktop-only, body.desktop .android-only { display: none !importan
 .link-dialog ul { color: var(--text-2); }
 .link-dialog .mono { word-break: break-all; }
 .list-hint.cve-hint { cursor: pointer; }
+
+/* Área de games */
+.nav-label.games-label { color: var(--game); }
+.nav-item.game.active { background: color-mix(in srgb, var(--game) 30%, var(--sidebar)); }
+.item.game.lvl-alto, .item.game.lvl-critico { box-shadow: inset 3px 0 0 var(--game); }
+.badge.destaque { background: var(--game); }
+.badge.game { background: var(--game-soft); color: var(--game); letter-spacing: 0; font-weight: 600; }
+.reasons.game { background: var(--game-soft); border-left-color: var(--game); }
+.reasons.game b { color: var(--game); }
+.tile.game .tile-n { color: var(--game); }
+.area-games .list-head h2 { color: var(--game); }
+.source-tools { gap: 8px; max-width: 600px; margin-bottom: 14px; }
+.source-tools .filter { flex: 1 1 240px; min-width: 0; max-width: none; margin-bottom: 0; }
+.source-tools select { flex: 0 0 auto; width: auto; }
