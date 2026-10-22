@@ -228,7 +228,7 @@ jobs:
 
       - name: Gerar o pacote com o PKGBUILD publicado
         run: |
-          pacman -Syu --noconfirm --needed base-devel
+          pacman -Syu --noconfirm --needed base-devel libglvnd
           useradd -m construtor
           mkdir /home/construtor/pkg
           ver=$(sed -n 's/^pkgver=//p' pacotes/PKGBUILD)
@@ -286,8 +286,8 @@ jobs:
 
       - name: Janela própria abre no Flatpak
         run: |
-          dnf install -y -q xorg-x11-server-Xvfb xorg-x11-xauth
-          xvfb-run -a dbus-run-session -- flatpak run --env=QT_QPA_PLATFORM=xcb             io.github.nerqs.MonitorNoticias --testar-janela | tee janela.txt
+          # Sem servidor gráfico no contêiner: o Qt desenha fora da tela, mas carrega tudo igual.
+          dbus-run-session -- flatpak run --env=QT_QPA_PLATFORM=offscreen io.github.nerqs.MonitorNoticias --testar-janela | tee janela.txt
           grep -q "motor=qtwebengine.*-> OK" janela.txt
 
       - uses: actions/upload-artifact@v7
