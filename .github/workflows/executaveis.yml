@@ -92,10 +92,6 @@ jobs:
         run: |
           $setup = "dist\MonitorNoticias-instalador-windows.exe"
           if (-not (Test-Path $setup)) { throw "instalador não foi gerado" }
-          # Quem usa o .zip já tem banco; o teste da janela fecha antes de a página criar o
-          # banco (depende do tempo), então o diagnóstico abre o banco de forma garantida.
-          Start-Process -FilePath dist\MonitorNoticias\MonitorNoticias.exe -ArgumentList '--diagnostico' -Wait | Out-Null
-          if (-not (Test-Path "dist\MonitorNoticias\data\monitor.db")) { throw "a versão .zip não criou o banco" }
           $opts = '/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART','/CURRENTUSER','/SEMABRIR=1'
           $p = Start-Process $setup -ArgumentList ($opts + '/LOG=instalacao.log') -Wait -PassThru
           if ($p.ExitCode -ne 0) { Get-Content instalacao.log -Tail 40; throw "instalação falhou: $($p.ExitCode)" }
@@ -107,10 +103,14 @@ jobs:
 
           # A versão .zip (passo da janela acima) anotou onde guarda os dados; a instalada copia na 1ª vez.
           $dados = "$env:LOCALAPPDATA\MonitorNoticias"
+          Set-Content dist\MonitorNoticias\data\marca-migracao.txt "zip"
+          Write-Host "Antes de abrir a versão instalada:"; Get-ChildItem $dados, dist\MonitorNoticias\data -ErrorAction SilentlyContinue | Format-Table -AutoSize | Out-String | Write-Host
+          Get-Content "$dados\versao-portatil.txt" -ErrorAction SilentlyContinue
           $p = Start-Process "$app\MonitorNoticias.exe" -ArgumentList '--testar-janela' -Wait -PassThru
           Get-Content "$dados\logs\monitor.log" -ErrorAction SilentlyContinue | Select-Object -Last 20
+          Get-ChildItem $dados -ErrorAction SilentlyContinue | Format-Table -AutoSize | Out-String | Write-Host
           if ($p.ExitCode -ne 0) { throw "a janela do programa instalado não abriu: $($p.ExitCode)" }
-          if (-not (Test-Path "$dados\monitor.db")) { throw "dados da versão .zip não foram migrados" }
+          if (-not (Test-Path "$dados\marca-migracao.txt")) { throw "dados da versão .zip não foram migrados" }
           if (-not (Test-Path "dist\MonitorNoticias\data\DADOS-MOVIDOS.txt")) { throw "aviso na pasta antiga não foi criado" }
           $p = Start-Process "$app\MonitorNoticias.exe" -ArgumentList '--autoteste' -Wait -PassThru
           if ($p.ExitCode -ne 0) { throw "autoteste do programa instalado falhou: $($p.ExitCode)" }
@@ -118,13 +118,13 @@ jobs:
           # Atualização silenciosa por cima (como o botão "Atualizar agora" faz).
           $p = Start-Process $setup -ArgumentList ($opts + '/SILENT','/CLOSEAPPLICATIONS') -Wait -PassThru
           if ($p.ExitCode -ne 0) { throw "atualização por cima falhou: $($p.ExitCode)" }
-          if (-not (Test-Path "$dados\monitor.db")) { throw "a atualização apagou os dados" }
+          if (-not (Test-Path "$dados\marca-migracao.txt")) { throw "a atualização apagou os dados" }
 
           $p = Start-Process "$app\unins000.exe" -ArgumentList '/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART' -Wait -PassThru
           Start-Sleep -Seconds 3
           if (Test-Path "$app\MonitorNoticias.exe") { throw "desinstalação deixou o programa" }
           if (Test-Path -LiteralPath $lnk) { throw "desinstalação deixou o atalho" }
-          if (-not (Test-Path "$dados\monitor.db")) { throw "a desinstalação não deve apagar os dados" }
+          if (-not (Test-Path "$dados\marca-migracao.txt")) { throw "a desinstalação não deve apagar os dados" }
 
       - name: Autoteste do executável (Linux)
         if: runner.os == 'Linux'

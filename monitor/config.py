@@ -93,7 +93,10 @@ def _default_data_dir() -> Path:
     beside = Path(sys.executable).resolve().parent / "data"
     try:
         beside.mkdir(parents=True, exist_ok=True)
-        probe = beside / ".teste-escrita"
+        # Nome único por thread: várias threads chamam isto ao mesmo tempo e, com
+        # um nome só, uma apagava o teste da outra e o programa caía para a pasta
+        # do usuário, criando um segundo banco por engano.
+        probe = beside / f".teste-escrita-{os.getpid()}-{threading.get_ident()}"
         probe.write_text("ok")
         probe.unlink()
         return beside
@@ -122,21 +125,32 @@ def remember_portable() -> None:
         pass
 
 
+migration_status = ""  # o que a migração fez ou por que não fez (vai para o log)
+
+
 def migrate_portable(target: Path | None = None) -> Path | None:
     """Na primeira vez da versão instalada, traz os dados da versão .zip.
 
     Copia (não move) tudo menos os pacotes de atualização baixados e deixa um
     aviso na pasta antiga. Só roda se a pasta nova ainda não tem banco.
     """
+    global migration_status
     target = target or data_dir()
     note = target / PORTABLE_NOTE
-    if not note.exists() or (target / "monitor.db").exists():
+    if not note.exists():
+        migration_status = f"sem anotação da versão .zip em {target}"
+        return None
+    if (target / "monitor.db").exists():
+        migration_status = f"{target} já tem banco; dados da versão .zip não copiados"
         return None
     source = Path(note.read_text(encoding="utf-8").strip())
-    if not (source / "monitor.db").exists() or source.resolve() == target.resolve():
+    # Banco ou configurações: quem só abriu a versão .zip uma vez pode não ter banco ainda.
+    has_data = any((source / name).exists() for name in ("monitor.db", "config.yaml", "sources.yaml"))
+    if not has_data or source.resolve() == target.resolve():
+        migration_status = f"nada para copiar de {source}"
         return None
     shutil.copytree(source, target, dirs_exist_ok=True,
-                    ignore=shutil.ignore_patterns("atualizacoes", ".teste-escrita", MOVED_NOTE))
+                    ignore=shutil.ignore_patterns("atualizacoes", ".teste-escrita*", MOVED_NOTE))
     note.unlink(missing_ok=True)
     try:
         (source / MOVED_NOTE).write_text(

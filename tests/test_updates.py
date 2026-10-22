@@ -272,3 +272,41 @@ def test_flatpak_schedule_explains_alternative(monkeypatch):
     monkeypatch.setenv("FLATPAK_ID", "io.github.nerqs.MonitorNoticias")
     with pytest.raises(RuntimeError, match="modo de alertas"):
         scheduler.install(config.load_config())
+
+
+def test_migrates_portable_without_database(monkeypatch, tmp_path):
+    """Quem só abriu a versão .zip (sem coletar) tem configurações mas pode não ter banco."""
+    portable = tmp_path / "zip" / "data"
+    portable.mkdir(parents=True)
+    (portable / "config.yaml").write_text("x: 1")
+    target = tmp_path / "local"
+    target.mkdir()
+    (target / config.PORTABLE_NOTE).write_text(str(portable))
+    assert config.migrate_portable(target) == portable.resolve()
+    assert (target / "config.yaml").read_text() == "x: 1" and (portable / config.MOVED_NOTE).exists()
+
+
+def test_data_dir_is_stable_across_threads(monkeypatch, tmp_path):
+    """Várias threads ao mesmo tempo não podem cair para a pasta do usuário (2º banco)."""
+    import threading
+
+    monkeypatch.delenv("MONITOR_DATA_DIR")
+    monkeypatch.setenv("LOCALAPPDATA", str(tmp_path / "local"))
+    monkeypatch.setattr(sys, "frozen", True, raising=False)
+    exe = tmp_path / "zip" / "MonitorNoticias.exe"
+    exe.parent.mkdir()
+    exe.write_bytes(b"")
+    monkeypatch.setattr(sys, "executable", str(exe))
+    seen = set()
+
+    def worker():
+        for _ in range(200):
+            seen.add(config.data_dir())
+
+    threads = [threading.Thread(target=worker) for _ in range(8)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+    # samefile: no Windows o resolve() às vezes devolve o mesmo caminho com o prefixo \\?\
+    assert all(path.samefile(tmp_path / "zip" / "data") for path in seen)
