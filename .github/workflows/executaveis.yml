@@ -100,8 +100,11 @@ jobs:
           # A versão .zip (passo da janela acima) anotou onde guarda os dados; a instalada copia na 1ª vez.
           $dados = "$env:LOCALAPPDATA\MonitorNoticias"
           Set-Content dist\MonitorNoticias\data\marca-migracao.txt "zip"
+          Write-Host "Antes de abrir a versão instalada:"; Get-ChildItem $dados, dist\MonitorNoticias\data -ErrorAction SilentlyContinue | Format-Table -AutoSize | Out-String | Write-Host
+          Get-Content "$dados\versao-portatil.txt" -ErrorAction SilentlyContinue
           $p = Start-Process "$app\MonitorNoticias.exe" -ArgumentList '--testar-janela' -Wait -PassThru
           Get-Content "$dados\logs\monitor.log" -ErrorAction SilentlyContinue | Select-Object -Last 20
+          Get-ChildItem $dados -ErrorAction SilentlyContinue | Format-Table -AutoSize | Out-String | Write-Host
           if ($p.ExitCode -ne 0) { throw "a janela do programa instalado não abriu: $($p.ExitCode)" }
           if (-not (Test-Path "$dados\marca-migracao.txt")) { throw "dados da versão .zip não foram migrados" }
           if (-not (Test-Path "dist\MonitorNoticias\data\DADOS-MOVIDOS.txt")) { throw "aviso na pasta antiga não foi criado" }

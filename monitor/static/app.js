@@ -84,7 +84,7 @@ const icon = (name) => `<svg class="icon"><use href="#i-${name}"/></svg>`;
 
 const VIEW_TITLES = {
   criticos: "Críticos", minhas: "Minhas tecnologias", paravoce: "Para você", seguranca: "Segurança",
-  tecnologia: "Tecnologia", favoritos: "Favoritos", todos: "Todas as notícias", silenciadas: "Silenciadas",
+  tecnologia: "Novidades de tecnologia", favoritos: "Favoritos", todos: "Todas de tecnologia", silenciadas: "Silenciadas",
   games_destaques: "Destaques de games", games_meus: "Meus jogos", games_paravoce: "Games para você",
   games_favoritos: "Games favoritos", games: "Todas de games",
 };
@@ -164,8 +164,9 @@ $("#menu-btn").addEventListener("click", () => $(".app").classList.add("nav-open
 $("#scrim").addEventListener("click", () => $(".app").classList.remove("nav-open"));
 $("#mobile-collect").addEventListener("click", () => startCollect());
 
-function showPage(page) {
+function showPage(page, tab) {
   state.page = page;
+  if (tab) showTab($(`#page-${page}`), tab);
   $(".app").classList.remove("nav-open");
   if (page !== "reader") setReading(false);
   $("#mobile-title").textContent = page === "reader" ? VIEW_TITLES[state.view] : PAGE_TITLES[page];
@@ -180,6 +181,34 @@ function showPage(page) {
   if (page === "config") loadConfig();
   if (page === "saude") loadHealth();
 }
+
+// Abas das páginas longas (Configurações, Saúde). Cada cartão diz a aba com
+// data-tab; um cartão sem data-tab fica na aba do cartão anterior.
+function setupTabs(page) {
+  let current = "";
+  $$(":scope > .card", page).forEach((card) => {
+    if (card.dataset.tab) current = card.dataset.tab;
+    else if (current) card.dataset.tab = current;
+  });
+  $$(".tabs [data-tab]", page).forEach((btn) => btn.addEventListener("click", () => showTab(page, btn.dataset.tab)));
+  let saved = null;
+  try { saved = localStorage.getItem(`aba-${page.id}`); } catch { /* sem armazenamento */ }
+  showTab(page, saved || $(".tabs [data-tab]", page).dataset.tab);
+}
+
+function showTab(page, tab) {
+  const btn = $(`.tabs [data-tab="${tab}"]`, page);
+  if (!btn || getComputedStyle(btn).display === "none") tab = $(".tabs [data-tab]", page).dataset.tab;
+  $$(".tabs [data-tab]", page).forEach((b) => {
+    b.classList.toggle("on", b.dataset.tab === tab);
+    b.setAttribute("aria-selected", b.dataset.tab === tab ? "true" : "false");
+  });
+  $$(":scope > .card", page).forEach((card) => card.classList.toggle("tab-hidden", card.dataset.tab !== tab));
+  page.scrollTop = 0;
+  try { localStorage.setItem(`aba-${page.id}`, tab); } catch { /* sem armazenamento */ }
+}
+
+$$(".page[data-tabs]").forEach(setupTabs);
 
 $$(".nav-item").forEach((btn) => {
   btn.addEventListener("click", () => {
@@ -363,7 +392,7 @@ async function renderEmptyReader() {
         <kbd>m</kbd> lida/não lida · <kbd>g</kbd> gostei · <kbd>n</kbd> não curti · <kbd>a</kbd> ler artigo · <kbd>o</kbd> abrir no navegador</p>
     </div>`;
   $$(".tile").forEach((t) => t.onclick = () => $(`.nav-item[data-view="${t.dataset.goto}"]`).click());
-  $$("[data-page-goto]").forEach((t) => t.onclick = () => showPage(t.dataset.pageGoto));
+  $$("[data-page-goto]").forEach((t) => t.onclick = () => showPage(t.dataset.pageGoto, t.dataset.tabGoto));
 }
 
 async function selectItem(id) {
@@ -465,20 +494,50 @@ async function setLike(item, value) {
   if (state.selectedId === item.id) renderItem(fresh);
 }
 
+// O artigo abre num iframe isolado, que não herda o CSS do programa: as cores do
+// tema entram por aqui. O color-scheme precisa ser o mesmo da página; se não for,
+// o navegador pinta o fundo do iframe de branco por baixo do texto claro do tema escuro.
 function articleDocument(html) {
   const cs = getComputedStyle(document.documentElement);
   const v = (name) => cs.getPropertyValue(name).trim();
+  const scheme = cs.colorScheme.includes("dark") ? "dark" : "light";
   return `<!doctype html><html><head><meta charset="utf-8"><base target="_blank"><style>
-    body { margin: 0; color: ${v("--text")}; background: transparent; font: 17px/1.65 ${v("--reading")}; }
-    img, video, figure { max-width: 100%; height: auto; }
-    a { color: ${v("--accent")}; }
-    pre, code { font-family: ${v("--mono")}; font-size: 13px; white-space: pre-wrap; background: ${v("--panel-2")}; }
-    pre { padding: 10px; border-radius: 6px; overflow-x: auto; }
-    h1, h2, h3 { font-family: ${v("--font")}; line-height: 1.3; }
-    table { border-collapse: collapse; max-width: 100%; } td, th { border: 1px solid ${v("--border")}; padding: 4px 6px; }
-    blockquote { border-left: 3px solid ${v("--border")}; margin-left: 0; padding-left: 14px; color: ${v("--muted")}; }
+    :root { color-scheme: ${scheme}; }
+    html { background: ${v("--panel")}; }
+    body { margin: 0; color: ${v("--text")}; background: ${v("--panel")}; font: 18px/1.75 ${v("--reading")};
+      overflow-wrap: break-word; -webkit-font-smoothing: antialiased; }
+    body > :first-child { margin-top: 0; }
+    p, ul, ol, dl, blockquote, figure, table, pre { margin: 0 0 1.1em; }
+    h1, h2, h3, h4, h5, h6 { font-family: ${v("--display")}; color: ${v("--text")}; line-height: 1.3;
+      letter-spacing: -.01em; margin: 1.6em 0 .5em; }
+    h1 { font-size: 1.45em; } h2 { font-size: 1.3em; } h3 { font-size: 1.12em; } h4, h5, h6 { font-size: 1em; }
+    strong, b { color: ${v("--text")}; font-weight: 700; }
+    a { color: ${v("--accent")}; text-decoration-thickness: 1px; text-underline-offset: 2px; }
+    li { margin: .25em 0; } ul, ol { padding-left: 1.4em; }
+    img, picture, figure { max-width: 100%; height: auto; }
+    img { border-radius: 8px; display: block; margin: 0 auto; }
+    figure { margin-left: 0; margin-right: 0; }
+    figcaption { font: 13px/1.5 ${v("--font")}; color: ${v("--muted")}; margin-top: 6px; text-align: center; }
+    hr { border: 0; border-top: 1px solid ${v("--border")}; margin: 2em 0; }
+    code, kbd, samp { font-family: ${v("--mono")}; font-size: .8em; background: ${v("--panel-2")};
+      border: 1px solid ${v("--border")}; border-radius: 4px; padding: .1em .35em; }
+    pre { font-family: ${v("--mono")}; font-size: 13.5px; line-height: 1.6; white-space: pre-wrap;
+      background: ${v("--panel-2")}; border: 1px solid ${v("--border")}; border-radius: 8px; padding: 12px 14px; overflow-x: auto; }
+    pre code { background: none; border: 0; padding: 0; font-size: inherit; }
+    table { border-collapse: collapse; max-width: 100%; display: block; overflow-x: auto; font: 14px/1.5 ${v("--font")}; }
+    td, th { border: 1px solid ${v("--border")}; padding: 6px 10px; text-align: left; }
+    th { background: ${v("--panel-2")}; font-weight: 600; }
+    blockquote { border-left: 3px solid ${v("--accent")}; margin-left: 0; padding: 2px 0 2px 16px; color: ${v("--text-2")}; font-style: italic; }
+    mark { background: ${v("--accent-soft")}; color: inherit; }
   </style></head><body>${html}</body></html>`;
 }
+
+// Troca de tema com um artigo aberto: refaz o documento do iframe com as cores novas.
+let openArticle = null;
+function restyleArticle() {
+  if (openArticle && openArticle.frame.isConnected) openArticle.frame.srcdoc = articleDocument(openArticle.html);
+}
+window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", restyleArticle);
 
 async function loadArticle(item, refresh = false) {
   const box = $("#article-body");
@@ -498,6 +557,7 @@ async function loadArticle(item, refresh = false) {
   // Sem "allow-scripts": o conteúdo do site não executa nada dentro do programa.
   frame.setAttribute("sandbox", "allow-same-origin allow-popups allow-popups-to-escape-sandbox");
   frame.srcdoc = articleDocument(data.html);
+  openArticle = { frame, html: data.html };
   frame.onload = () => {
     const doc = frame.contentDocument;
     if (!doc) return;
@@ -679,13 +739,13 @@ function healthNotices(h) {
   if (!h || !h.schedule) return "";
   let html = "";
   if (h.schedule.missed) {
-    html += `<button class="notice warn" data-page-goto="saude">${icon("pulse")}<span><b>${esc(h.schedule.message)}</b>
+    html += `<button class="notice warn" data-page-goto="saude" data-tab-goto="agendamento">${icon("pulse")}<span><b>${esc(h.schedule.message)}</b>
       ${esc(h.schedule.fix || "")}</span></button>`;
   }
   const findings = (h.selfcheck && h.selfcheck.findings) || [];
   if (findings.length) {
     const pkgs = [...new Set(findings.map((f) => f.package))].join(", ");
-    html += `<button class="notice" data-page-goto="saude">${icon("bug")}<span><b>As bibliotecas do programa têm
+    html += `<button class="notice" data-page-goto="saude" data-tab-goto="diagnostico">${icon("bug")}<span><b>As bibliotecas do programa têm
       ${findings.length} falha${findings.length > 1 ? "s" : ""} conhecida${findings.length > 1 ? "s" : ""}</b> (${esc(pkgs)}). Ver como atualizar</span></button>`;
   }
   if (h.silent && h.silent.length) {
@@ -1122,11 +1182,15 @@ async function saveConfig(quiet = false) {
   const res = await api("/api/config", { method: "PUT", body: { config: cfg } });
   state.config = cfg;
   document.documentElement.dataset.theme = cfg.appearance.theme;
+  restyleArticle();
   if (!quiet) toast(res.rescored ? `Configurações salvas. Prioridade de ${res.rescored} notícias recalculada.` : "Configurações salvas.");
 }
 
 $("#save-config").addEventListener("click", () => saveConfig().catch((e) => toast(e.message, true)));
-$("#theme-select").addEventListener("change", (ev) => { document.documentElement.dataset.theme = ev.target.value; });
+$("#theme-select").addEventListener("change", (ev) => {
+  document.documentElement.dataset.theme = ev.target.value;
+  restyleArticle();
+});
 
 $("#email-provider").addEventListener("change", (ev) => {
   const preset = PRESETS[ev.target.value] || {};
