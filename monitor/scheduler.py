@@ -1,7 +1,8 @@
 """Agendamento da coleta diária e do modo residente.
 
-Windows: Agendador de Tarefas (schtasks). Linux: crontab e ~/.config/autostart.
-Também avisa quando a coleta agendada de hoje não aconteceu.
+Coleta diária — Windows: Agendador de Tarefas (schtasks). Linux: crontab.
+Iniciar com o sistema — Windows: chave Run do registro do usuário. Linux: ~/.config/autostart.
+Também avisa quando a coleta agendada de hoje não aconteceu e diz se ela já venceu.
 """
 
 from __future__ import annotations
@@ -15,7 +16,9 @@ from pathlib import Path
 from . import config, db
 
 TASK_NAME = "MonitorNoticias"
-RESIDENT_TASK = "MonitorNoticias-residente"
+RESIDENT_TASK = "MonitorNoticias-residente"  # versões até 0.4: tarefa ao entrar no Windows
+RUN_KEY = r"Software\Microsoft\Windows\CurrentVersion\Run"
+RUN_VALUE = "MonitorNoticias"
 CRON_MARK = "# monitor-noticias"
 WINDOWS = sys.platform == "win32"
 
@@ -134,10 +137,7 @@ def status(cfg: dict | None = None, now: datetime | None = None) -> dict:
     due = now.replace(hour=at.hour, minute=at.minute, second=0, microsecond=0)
     if now < due + timedelta(minutes=30):
         return result
-    run = db.last_run()
-    last = None
-    if run:
-        last = datetime.strptime(run["started_at"][:19], "%Y-%m-%d %H:%M:%S").replace(tzinfo=timezone.utc)
+    last = last_run_time()
     if last is None or last < due - timedelta(minutes=5):
         hours = (now - last).total_seconds() / 3600 if last else None
         result["missed"] = True
@@ -151,44 +151,115 @@ def status(cfg: dict | None = None, now: datetime | None = None) -> dict:
     return result
 
 
-# --- Modo residente ao entrar no sistema --------------------------------------
+def last_run_time() -> datetime | None:
+    run = db.last_run()
+    if not run:
+        return None
+    return datetime.strptime(run["started_at"][:19], "%Y-%m-%d %H:%M:%S").replace(tzinfo=timezone.utc)
+
+
+def last_slot(cfg: dict, now: datetime | None = None) -> datetime:
+    """Horário agendado mais recente que já chegou (hoje ou num dia útil anterior)."""
+    sched = cfg.get("schedule", {})
+    at = _parse_time(sched.get("time"))
+    now = now or datetime.now().astimezone()
+    slot = now.replace(hour=at.hour, minute=at.minute, second=0, microsecond=0)
+    if slot > now:
+        slot -= timedelta(days=1)
+    while sched.get("weekdays_only", True) and slot.weekday() >= 5:
+        slot -= timedelta(days=1)
+    return slot
+
+
+def collection_due(cfg: dict, now: datetime | None = None) -> bool:
+    """True quando há coleta agendada cujo horário já passou e ela ainda não rodou.
+
+    Usado ao iniciar com o sistema (o computador estava desligado no horário) e
+    pelo programa na bandeja, que roda a coleta do dia sozinho.
+    """
+    if config.is_android() or not cfg.get("schedule", {}).get("installed"):
+        return False
+    last = last_run_time()
+    return last is None or last < last_slot(cfg, now) - timedelta(minutes=1)
+
+
+# --- Iniciar com o sistema ------------------------------------------------------
 
 def _autostart_file() -> Path:
     base = Path(os.environ.get("XDG_CONFIG_HOME") or Path.home() / ".config")
     return base / "autostart" / "monitor-noticias.desktop"
 
 
+def _old_task_installed() -> bool:
+    return WINDOWS and _run(["schtasks", "/Query", "/TN", RESIDENT_TASK]).returncode == 0
+
+
+def _registry(command: str | None) -> None:
+    """Grava (ou apaga, com None) o programa na lista do que abre ao entrar no Windows."""
+    import winreg
+
+    with winreg.CreateKey(winreg.HKEY_CURRENT_USER, RUN_KEY) as key:
+        if command is None:
+            try:
+                winreg.DeleteValue(key, RUN_VALUE)
+            except FileNotFoundError:
+                pass
+        else:
+            winreg.SetValueEx(key, RUN_VALUE, 0, winreg.REG_SZ, command)
+
+
+def _registry_has_value() -> bool:
+    import winreg
+
+    try:
+        with winreg.OpenKey(winreg.HKEY_CURRENT_USER, RUN_KEY) as key:
+            winreg.QueryValueEx(key, RUN_VALUE)
+            return True
+    except OSError:
+        return False
+
+
 def install_resident() -> str:
+    """Faz o programa abrir sozinho (na bandeja) quando você entra no sistema."""
     if config.is_android():
-        raise RuntimeError("O modo de alertas é só para o computador. No celular, use o Telegram.")
-    command = program_command("--residente")
+        raise RuntimeError("Iniciar com o sistema é só para o computador.")
+    command = program_command("--inicio-sistema")
     if WINDOWS:
-        result = _run(["schtasks", "/Create", "/F", "/TN", RESIDENT_TASK, "/TR", _quote(command),
-                       "/SC", "ONLOGON", "/RL", "LIMITED"])
-        if result.returncode != 0:
-            raise RuntimeError(result.stderr.strip() or "schtasks falhou.")
+        try:
+            _registry(subprocess.list2cmdline(command))
+        except OSError as exc:
+            raise RuntimeError(f"Não foi possível gravar no registro do Windows: {exc}")
+        if _old_task_installed():  # troca a tarefa antiga do modo de alertas pela chave do registro
+            _run(["schtasks", "/Delete", "/F", "/TN", RESIDENT_TASK])
     else:
         path = _autostart_file()
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text("[Desktop Entry]\nType=Application\nName=Monitor de notícias (alertas)\n"
-                        f"Exec={_quote(command)}\nX-GNOME-Autostart-enabled=true\n", encoding="utf-8")
-    return "O modo de alertas vai iniciar sozinho quando você entrar no sistema."
+        icon = config.PACKAGE_DIR / "static" / "icone.png"
+        path.write_text("[Desktop Entry]\nType=Application\nName=Monitor de notícias\n"
+                        f"Exec={_quote(command)}\nIcon={icon}\nX-GNOME-Autostart-enabled=true\n"
+                        "X-GNOME-Autostart-Delay=10\n", encoding="utf-8")
+    return "O programa vai abrir sozinho, perto do relógio, quando você entrar no sistema."
 
 
 def uninstall_resident() -> str:
     if WINDOWS:
+        try:
+            _registry(None)
+        except OSError:
+            pass
         _run(["schtasks", "/Delete", "/F", "/TN", RESIDENT_TASK])
     else:
         _autostart_file().unlink(missing_ok=True)
-    return "Início automático do modo de alertas removido."
+    return "O programa não vai mais abrir sozinho com o sistema."
 
 
 def resident_installed() -> bool:
+    """True quando o programa abre sozinho ao entrar no sistema."""
     if config.is_android():
         return False
     try:
         if WINDOWS:
-            return _run(["schtasks", "/Query", "/TN", RESIDENT_TASK]).returncode == 0
+            return _registry_has_value() or _old_task_installed()
         return _autostart_file().exists()
     except OSError:
         return False

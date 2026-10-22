@@ -102,10 +102,19 @@ chat:
   max_items: 10
 
 alerts:
-  interval_minutes: 60    # modo residente: de quanto em quanto tempo coletar
+  background: true        # com o programa aberto (ou na bandeja), coleta de tempo em tempo
+  interval_minutes: 60    # de quanto em quanto tempo coletar
   scope: criticas         # criticas (só fontes de segurança) | todas
-  only_mine: false        # só avisa o que cita suas tecnologias ou afeta sua versão
-  chat: false             # também manda o alerta para o celular
+  notify: todas           # notificação na área de trabalho: todas (resumo das novas) | criticas | nenhuma
+  only_mine: false        # críticas: só avisa o que cita suas tecnologias ou afeta sua versão
+  chat: false             # também manda o alerta de críticas para o celular
+
+desktop:
+  start_with_system: false  # abre sozinho ao entrar no sistema (o valor real fica no sistema)
+  start_hidden: true        # ao abrir com o sistema, fica só o ícone perto do relógio
+  close_to_tray: true       # fechar a janela deixa o programa rodando na bandeja
+  ask_on_close: true        # pergunta antes, ao fechar a janela
+  catch_up: true            # coleta agendada que não rodou (computador desligado): roda ao abrir
 
 schedule:
   time: "07:00"

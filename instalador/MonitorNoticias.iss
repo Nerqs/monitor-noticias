@@ -61,6 +61,10 @@ Filename: "{app}\instalacao.ini"; Section: "instalacao"; Key: "versao"; String: 
 Name: "{autoprograms}\{#MyAppName}"; Filename: "{app}\{#MyAppExe}"; Comment: "Notícias de tecnologia e falhas críticas"
 Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExe}"; Tasks: desktopicon; Comment: "Notícias de tecnologia e falhas críticas"
 
+[Registry]
+; "Iniciar com o sistema" grava este valor pelo programa; a desinstalação apaga.
+Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: none; ValueName: "MonitorNoticias"; Flags: dontcreatekey uninsdeletevalue
+
 [Run]
 ; Também roda na atualização silenciosa: o programa reabre sozinho na versão nova.
 Filename: "{app}\{#MyAppExe}"; Description: "Abrir o {#MyAppName}"; Flags: nowait postinstall runasoriginaluser; Check: AbrirDepois

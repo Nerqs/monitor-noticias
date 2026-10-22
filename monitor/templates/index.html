@@ -205,11 +205,11 @@
         <button id="sched-install" class="btn primary">Agendar coleta diária</button>
         <button id="sched-remove" class="btn ghost danger">Remover agendamento</button>
       </div>
-      <h3>Alertas na área de trabalho</h3>
-      <p class="muted small">O modo de alertas fica perto do relógio e avisa quando surge uma falha crítica. Ajuste o intervalo em Configurações → Alertas.</p>
+      <h3>Iniciar com o sistema</h3>
+      <p class="muted small">O programa abre sozinho perto do relógio, roda a coleta agendada se o horário já passou e avisa das notícias novas. Ajuste em Configurações → Bandeja, início e notificações.</p>
       <p id="resident-status" class="small"></p>
       <div class="actions">
-        <button id="resident-on" class="btn">Iniciar alertas com o sistema</button>
+        <button id="resident-on" class="btn">Iniciar com o sistema</button>
         <button id="resident-off" class="btn ghost danger">Não iniciar com o sistema</button>
       </div>
     </div>
@@ -409,16 +409,26 @@
     </div>
 
     <div class="card desktop-only">
-      <h2>Alertas na área de trabalho</h2>
-      <p class="muted small">Valem para o modo de alertas (ligue em Saúde do programa ou rode <code>--residente</code>).</p>
+      <h2>Bandeja, início e notificações</h2>
+      <p class="muted small">Com o programa aberto, mesmo escondido perto do relógio, ele coleta de tempo em tempo e avisa quando chegam notícias novas.</p>
       <div class="grid">
+        <label class="check"><input type="checkbox" name="desktop.start_with_system"> Iniciar junto com o sistema</label>
+        <label class="check"><input type="checkbox" name="desktop.start_hidden"> Ao iniciar com o sistema, abrir só o ícone perto do relógio</label>
+        <label class="check"><input type="checkbox" name="desktop.close_to_tray"> Fechar a janela deixa o programa rodando na bandeja</label>
+        <label class="check"><input type="checkbox" name="desktop.ask_on_close"> Avisar antes, ao fechar a janela</label>
+        <label class="check"><input type="checkbox" name="desktop.catch_up"> Se a coleta agendada não rodou (computador desligado), coletar ao abrir</label>
+        <label class="check"><input type="checkbox" name="alerts.background"> Coletar de tempo em tempo enquanto o programa está aberto</label>
         <label>Coletar a cada (minutos) <input name="alerts.interval_minutes" type="number" min="10" max="1440"></label>
-        <label>O que coletar
+        <label>O que coletar de tempo em tempo
           <select name="alerts.scope"><option value="criticas">Só fontes de segurança</option><option value="todas">Todas as fontes</option></select>
         </label>
-        <label class="check"><input type="checkbox" name="alerts.only_mine"> Só avisar o que cita minhas tecnologias ou afeta minha versão</label>
-        <label class="check"><input type="checkbox" name="alerts.chat"> Também mandar o alerta para o celular</label>
+        <label>Notificações na área de trabalho
+          <select name="alerts.notify"><option value="todas">Todas as notícias novas (resumo) e as críticas</option><option value="criticas">Só as críticas</option><option value="nenhuma">Nenhuma</option></select>
+        </label>
+        <label class="check"><input type="checkbox" name="alerts.only_mine"> Críticas: só avisar o que cita minhas tecnologias ou afeta minha versão</label>
+        <label class="check"><input type="checkbox" name="alerts.chat"> Também mandar o alerta de críticas para o celular</label>
       </div>
+      <p class="muted small">A coleta agendada usa o horário de Saúde → Coleta automática. Abrir o programa de novo, pelo atalho, traz a janela que estava escondida.</p>
     </div>
 
     <div class="card">
@@ -559,6 +569,26 @@
     <button id="update-later" class="btn ghost small">Depois</button>
     <button id="update-skip" class="btn ghost small">Pular esta versão</button>
   </div>
+</div>
+<!-- Fechar a janela: avisa que o programa continua na bandeja -->
+<dialog id="close-dialog">
+  <form method="dialog" class="close-dialog">
+    <h2>O programa vai continuar aberto</h2>
+    <p>Fechar a janela deixa o Monitor de notícias rodando perto do relógio: ele segue coletando de tempo em tempo e avisa quando chegarem notícias novas.</p>
+    <p class="muted small">Para abrir de novo, clique no ícone perto do relógio ou abra o programa pelo atalho. Para fechar de vez, use <b>Sair</b> no menu do ícone.</p>
+    <label class="check"><input type="checkbox" id="close-remember"> Não perguntar de novo</label>
+    <div class="actions right">
+      <button value="quit" class="btn ghost">Sair do programa</button>
+      <button value="cancel" class="btn ghost">Cancelar</button>
+      <button value="hide" class="btn primary">Continuar na bandeja</button>
+    </div>
+  </form>
+</dialog>
+
+<div id="activity" class="activity hidden" role="status" aria-live="polite">
+  <span class="spinner" aria-hidden="true"></span>
+  <div class="activity-text"><b id="activity-title">Coletando notícias…</b><span id="activity-detail" class="small"></span></div>
+  <div class="activity-bar"><div id="activity-bar"></div></div>
 </div>
 <div id="toast" class="toast hidden"></div>
 

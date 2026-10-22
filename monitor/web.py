@@ -9,6 +9,7 @@ import re
 import secrets as pysecrets
 import subprocess
 import sys
+import threading
 import webbrowser
 from pathlib import Path
 
@@ -21,6 +22,8 @@ from .sanitize import clean_html
 
 API_TOKEN = pysecrets.token_urlsafe(24)
 open_url = webbrowser.open  # o app Android troca por um que usa o navegador do celular
+# Ações da janela e da bandeja (show, hide, quit, collect), ligadas pelo programa de computador.
+app_hooks: dict = {}
 LOCAL_HOSTS = {"127.0.0.1", "localhost", "[::1]"}
 CVE_RE = re.compile(r"^CVE-\d{4}-\d{4,7}$", re.IGNORECASE)
 
@@ -189,6 +192,24 @@ def create_app(token: str = API_TOKEN) -> Flask:
         presence.bye()
         return jsonify({"ok": True})
 
+    @app.post("/api/app")
+    def app_action():
+        """Janela (fechar para a bandeja ou sair) e pedidos de outra cópia do programa."""
+        data = body()
+        action = str(data.get("action", ""))
+        hook = app_hooks.get(action)
+        if hook is None:
+            return jsonify({"ok": False})
+        if data.get("remember") and action in ("hide", "quit"):
+            cfg = config.load_config()
+            desktop = cfg.setdefault("desktop", {})
+            desktop["ask_on_close"] = False
+            desktop["close_to_tray"] = action == "hide"
+            config.save_config(cfg)
+        # Responde antes: sair fecha o servidor junto.
+        threading.Timer(0.2, hook, (data,)).start()
+        return jsonify({"ok": True})
+
     @app.get("/api/counts")
     def counts():
         return jsonify(db.counts())
@@ -324,7 +345,10 @@ def create_app(token: str = API_TOKEN) -> Flask:
 
     @app.get("/api/config")
     def config_get():
-        return jsonify({"config": config.load_config()})
+        cfg = config.load_config()
+        # "Iniciar com o sistema" vale o que está no sistema, não o que ficou no arquivo.
+        cfg.setdefault("desktop", {})["start_with_system"] = scheduler.resident_installed()
+        return jsonify({"config": cfg, "tray": bool(app_hooks)})
 
     @app.get("/api/email/password")
     def email_password_status():
@@ -341,6 +365,9 @@ def create_app(token: str = API_TOKEN) -> Flask:
         if not isinstance(data.get("config"), dict):
             abort(400)
         current = config.load_config()
+        wanted = (data["config"].get("desktop") or {}).get("start_with_system")
+        if isinstance(wanted, bool) and not config.is_android() and wanted != scheduler.resident_installed():
+            scheduler.install_resident() if wanted else scheduler.uninstall_resident()
         before = json.dumps([current.get("filters"), current.get("interests", {}).get("versions")], sort_keys=True)
         games_before = json.dumps(current.get("games"), sort_keys=True)
         for section, values in data["config"].items():
