@@ -96,8 +96,32 @@ def run_resident() -> int:
         server.shutdown()
 
 
+def unblock_bundle() -> int:
+    """Tira a marca "baixado da internet" das DLLs do executável no Windows.
+
+    Ao extrair o .zip baixado, o Windows marca cada arquivo (Zone.Identifier) e o
+    .NET recusa carregar DLL marcada; sem isso a janela própria não abre
+    ("Failed to resolve Python.Runtime.Loader.Initialize").
+    """
+    if os.name != "nt" or not getattr(sys, "frozen", False):
+        return 0
+    removed = 0
+    for folder, _dirs, files in os.walk(getattr(sys, "_MEIPASS", os.path.dirname(sys.executable))):
+        for name in files:
+            if name.lower().endswith(".dll"):
+                try:
+                    os.remove(os.path.join(folder, name) + ":Zone.Identifier")
+                    removed += 1
+                except OSError:
+                    pass  # sem marca, ou pasta sem permissão de escrita
+    if removed:
+        logging.info("marca de download removida de %d DLLs", removed)
+    return removed
+
+
 def _open_window(url: str, on_start=None):
     """Abre a janela própria (pywebview). Volta quando o usuário fecha a janela."""
+    unblock_bundle()
     import webview
 
     window = webview.create_window("Monitor de notícias", url, width=1360, height=880, min_size=(900, 600))
