@@ -34,6 +34,11 @@ EMAIL_PRESETS = {
 _lock = threading.Lock()
 
 
+def is_android() -> bool:
+    """Rodando dentro do app Android (definido pelo monitor_android)."""
+    return os.environ.get("MONITOR_PLATFORM") == "android"
+
+
 def _default_data_dir() -> Path:
     if not getattr(sys, "frozen", False):
         return PACKAGE_DIR.parent / "data"

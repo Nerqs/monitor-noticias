@@ -111,7 +111,7 @@ def test_csp_blocks_remote_images_when_configured():
 
 def test_open_suspicious_link_needs_confirm(monkeypatch):
     opened = []
-    monkeypatch.setattr(web.webbrowser, "open", opened.append)
+    monkeypatch.setattr(web, "open_url", opened.append)
     client = web.create_app("t").test_client()
     h = {"X-Token": "t"}
     res = client.post("/api/open", json={"url": "https://xn--pple-43d.com/login"}, headers=h).json

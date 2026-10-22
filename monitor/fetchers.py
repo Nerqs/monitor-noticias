@@ -458,10 +458,27 @@ def discover_feeds(url: str, client: httpx.Client) -> list[dict]:
 
 def fetch_article(url: str, client: httpx.Client, block_images: bool = False) -> str:
     """Baixa a página e extrai só o texto principal (modo leitura), já limpo."""
-    from readability import Document
-
     from .sanitize import clean_html
 
     response = http_get(client, url)
-    doc = Document(response.text)
-    return clean_html(doc.summary(html_partial=True), str(response.url), block_images=block_images)
+    try:
+        from readability import Document
+    except ImportError:  # app Android: sem lxml, usa a extração simples
+        body = simple_main_content(response.text)
+    else:
+        body = Document(response.text).summary(html_partial=True)
+    return clean_html(body, str(response.url), block_images=block_images)
+
+
+def simple_main_content(page: str) -> str:
+    """Extração do texto principal sem lxml: pega o <article> ou o bloco com mais parágrafos."""
+    soup = BeautifulSoup(page, "html.parser")
+    for tag in soup(["script", "style", "nav", "header", "footer", "aside", "form", "noscript"]):
+        tag.decompose()
+    candidates = soup.find_all("article") or soup.find_all(["main", "div", "section"])
+    best, best_len = None, 0
+    for node in candidates:
+        length = sum(len(p.get_text(" ", strip=True)) for p in node.find_all("p", recursive=True))
+        if length > best_len:
+            best, best_len = node, length
+    return str(best or soup.body or soup)

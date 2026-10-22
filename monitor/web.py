@@ -20,6 +20,7 @@ from . import (backup, config, cveinfo, db, diagnostics, emailer, fetchers, heal
 from .sanitize import clean_html
 
 API_TOKEN = pysecrets.token_urlsafe(24)
+open_url = webbrowser.open  # o app Android troca por um que usa o navegador do celular
 LOCAL_HOSTS = {"127.0.0.1", "localhost", "[::1]"}
 CVE_RE = re.compile(r"^CVE-\d{4}-\d{4,7}$", re.IGNORECASE)
 
@@ -92,6 +93,7 @@ def create_app(token: str = API_TOKEN) -> Flask:
             token=token,
             nonce=g.nonce,
             version=__version__,
+            android=config.is_android(),
             theme=cfg.get("appearance", {}).get("theme", "auto"),
             source_types=config.SOURCE_TYPES,
             presets=config.EMAIL_PRESETS,
@@ -185,7 +187,7 @@ def create_app(token: str = API_TOKEN) -> Flask:
         check = linkcheck.assess(url)
         if check["suspicious"] and not data.get("confirm"):
             return jsonify({"ok": False, "needs_confirm": True, **check})
-        webbrowser.open(url)
+        open_url(url)
         return jsonify({"ok": True, **check})
 
     @app.post("/api/link-check")
@@ -443,6 +445,8 @@ def create_app(token: str = API_TOKEN) -> Flask:
         folder = allowed.get(str(body().get("folder")))
         if folder is None:
             abort(400)
+        if config.is_android():
+            return jsonify({"error": "No Android a pasta de dados é privada do app."}), 400
         folder.mkdir(parents=True, exist_ok=True)
         _open_folder(folder)
         return jsonify({"ok": True, "path": str(folder)})

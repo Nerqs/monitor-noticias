@@ -34,7 +34,9 @@ def check_python() -> dict:
 
 def check_modules() -> dict:
     missing = []
-    for name in REQUIRED_MODULES:
+    required = [m for m in REQUIRED_MODULES if m not in ("readability", "lxml_html_clean", "keyring")] \
+        if config.is_android() else REQUIRED_MODULES
+    for name in required:
         try:
             importlib.import_module(name)
         except Exception as exc:
@@ -42,7 +44,7 @@ def check_modules() -> dict:
     if missing:
         return _check("Bibliotecas", "erro", "Faltando: " + ", ".join(missing),
                       "Rode de novo o iniciar.bat/iniciar.sh ou: pip install -r requirements.txt")
-    return _check("Bibliotecas", "ok", f"{len(REQUIRED_MODULES)} bibliotecas principais carregadas.")
+    return _check("Bibliotecas", "ok", f"{len(required)} bibliotecas principais carregadas.")
 
 
 def check_data_dir() -> dict:
@@ -215,8 +217,10 @@ def check_selfaudit() -> dict:
 
 def run(quick: bool = False) -> list[dict]:
     cfg = config.load_config()
-    checks = [check_python(), check_modules(), check_data_dir(), check_database(), check_keyring(),
-              check_window(), check_sources(cfg), check_schedule(cfg), check_selfaudit()]
+    checks = [check_python(), check_modules(), check_data_dir(), check_database(), check_keyring()]
+    if not config.is_android():
+        checks += [check_window(), check_schedule(cfg)]
+    checks += [check_sources(cfg), check_selfaudit()]
     if not quick:
         checks += check_internet(cfg)
         checks.append(check_email(cfg))

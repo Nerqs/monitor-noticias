@@ -99,5 +99,8 @@ maintenance:
 security:
   self_audit: true        # confere as bibliotecas do programa na base OSV uma vez por dia
 
+android:
+  collect_on_open: true   # app Android: coleta sempre que o app é aberto
+
 appearance:
   theme: auto             # auto | light | dark

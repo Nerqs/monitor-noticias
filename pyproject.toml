@@ -1,0 +1,42 @@
+# Configuração do app Android (Briefcase). O programa de PC não depende deste arquivo.
+# Gerar o .apk: pip install briefcase && briefcase package android -p debug-apk
+# O GitHub Actions faz isso sozinho (workflow "App Android").
+
+[tool.briefcase]
+project_name = "Monitor de notícias"
+bundle = "io.github.nerqs"
+version = "0.2.0"
+url = "https://github.com/Nerqs/monitor-noticias"
+license.file = "LICENSE-APP.txt"
+author = "Nerqs"
+author_email = "96776286+Nerqs@users.noreply.github.com"
+
+[tool.briefcase.app.monitornoticias]
+formal_name = "Monitor de notícias"
+description = "Notícias de tecnologia e falhas críticas, priorizadas para a sua stack."
+long_description = "Coleta notícias de segurança e tecnologia, prioriza falhas críticas e mostra tudo num leitor próprio."
+icon = "android/icone"
+sources = ["monitor", "android/monitor_android"]
+requires = [
+    "feedparser>=6.0",
+    "httpx>=0.27",
+    "flask>=3.0",
+    "jinja2>=3.1",
+    "pyyaml>=6.0",
+    "beautifulsoup4>=4.12",
+]
+
+[tool.briefcase.app.monitornoticias.android]
+requires = [
+    "toga-android~=0.5.0",
+]
+base_theme = "Theme.MaterialComponents.DayNight.NoActionBar"
+build_gradle_dependencies = [
+    "com.google.android.material:material:1.13.0",
+    "androidx.webkit:webkit:1.15.0",
+]
+build_gradle_extra_content = """
+chaquopy.defaultConfig.staticProxy("toga_android.widgets.internal.webview")
+"""
+# O leitor conversa com o servidor local em http://127.0.0.1 (só dentro do aparelho).
+android_manifest_application_attrs_extra_content = 'android:usesCleartextTraffic="true"'

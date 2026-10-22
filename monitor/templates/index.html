@@ -7,7 +7,7 @@
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 24 24%22 fill=%22none%22 stroke=%22%232f6fde%22 stroke-width=%222%22%3E%3Cpath d=%22M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z%22/%3E%3C/svg%3E">
 <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
-<body>
+<body class="{{ 'android' if android else 'desktop' }}">
 <svg xmlns="http://www.w3.org/2000/svg" style="display:none">
   <defs>
     <symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="m9 12 2 2 4-4"/></symbol>
@@ -30,11 +30,19 @@
     <symbol id="i-up" viewBox="0 0 24 24"><path d="M7 10v12M15 5.88 14 10h5.83a2 2 0 0 1 1.92 2.56l-2.33 8A2 2 0 0 1 17.5 22H4a2 2 0 0 1-2-2v-8a2 2 0 0 1 2-2h2.76a2 2 0 0 0 1.79-1.11L12 2a3.13 3.13 0 0 1 3 3.88z"/></symbol>
     <symbol id="i-down" viewBox="0 0 24 24"><path d="M17 14V2M9 18.12 10 14H4.17a2 2 0 0 1-1.92-2.56l2.33-8A2 2 0 0 1 6.5 2H20a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2h-2.76a2 2 0 0 0-1.79 1.11L12 22a3.13 3.13 0 0 1-3-3.88z"/></symbol>
     <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+    <symbol id="i-menu" viewBox="0 0 24 24"><path d="M3 6h18M3 12h18M3 18h18"/></symbol>
+    <symbol id="i-back" viewBox="0 0 24 24"><path d="M19 12H5M12 19l-7-7 7-7"/></symbol>
     <symbol id="i-pulse" viewBox="0 0 24 24"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></symbol>
     <symbol id="i-bug" viewBox="0 0 24 24"><rect x="8" y="6" width="8" height="14" rx="4"/><path d="M19 7l-3 2M5 7l3 2M19 19l-3-2M5 19l3-2M20 13h-4M4 13h4M10 4l1 2M14 4l-1 2"/></symbol>
   </defs>
 </svg>
 <div class="app">
+  <header class="mobile-bar">
+    <button class="btn ghost icon-btn" id="menu-btn" title="Menu" aria-label="Abrir menu"><svg class="icon"><use href="#i-menu"/></svg></button>
+    <span class="mobile-title" id="mobile-title">Críticos</span>
+    <button class="btn ghost icon-btn" id="mobile-collect" title="Coletar agora" aria-label="Coletar agora"><svg class="icon"><use href="#i-refresh"/></svg></button>
+  </header>
+  <div class="scrim" id="scrim"></div>
   <aside class="sidebar">
     <div class="brand"><div class="logo"><svg class="icon"><use href="#i-shield"/></svg></div><div>Monitor<span>de notícias</span></div></div>
     <nav>
@@ -159,7 +167,7 @@
       <div class="actions"><button id="selfcheck-run" class="btn">Conferir agora</button></div>
     </div>
 
-    <div class="card">
+    <div class="card desktop-only">
       <h2>Coleta automática</h2>
       <div class="grid">
         <label>Horário <input id="sched-time" type="time" value="07:00"></label>
@@ -186,10 +194,10 @@
       <p id="db-status" class="small"></p>
       <p class="muted small">A faxina roda sozinha uma vez por dia: apaga notícias com mais de 90 dias (menos favoritas e as que você avaliou) e compacta o arquivo.</p>
       <div class="actions"><button id="cleanup-run" class="btn">Limpar agora</button>
-        <button class="btn ghost" data-folder="dados">Abrir pasta de dados</button></div>
+        <button class="btn ghost desktop-only" data-folder="dados">Abrir pasta de dados</button></div>
     </div>
 
-    <div class="card">
+    <div class="card desktop-only">
       <h2>Atualização</h2>
       <p id="update-status" class="small">Versão instalada: {{ version }}.</p>
       <p class="muted small">O pacote novo só é aceito se o hash SHA-256 conferir com o publicado no GitHub.</p>
@@ -206,7 +214,7 @@
       <textarea id="report-text" rows="8" readonly class="mono hidden"></textarea>
       <div class="actions">
         <button id="report-copy" class="btn">Copiar relatório</button>
-        <button class="btn ghost" data-folder="logs">Abrir pasta de logs</button>
+        <button class="btn ghost desktop-only" data-folder="logs">Abrir pasta de logs</button>
       </div>
     </div>
   </main>
@@ -348,7 +356,13 @@
       <div class="actions"><button id="chat-test" class="btn">Enviar mensagem de teste</button><span id="chat-status" class="small"></span></div>
     </div>
 
-    <div class="card">
+    <div class="card android-only">
+      <h2>Celular</h2>
+      <label class="check"><input type="checkbox" name="android.collect_on_open"> Coletar sempre que abrir o app</label>
+      <p class="muted small">O Android não deixa o app coletar escondido sem gastar bateria. Para ser avisado na hora, ligue o envio para o Telegram acima: ele roda no seu computador.</p>
+    </div>
+
+    <div class="card desktop-only">
       <h2>Alertas na área de trabalho</h2>
       <p class="muted small">Valem para o modo de alertas (ligue em Saúde do programa ou rode <code>--residente</code>).</p>
       <div class="grid">

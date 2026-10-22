@@ -131,8 +131,32 @@ function hostOf(url) {
 
 // --- Navegação --------------------------------------------------------------
 
+const PAGE_TITLES = { fontes: "Fontes", erros: "Erros de coleta", saude: "Saúde", config: "Configurações" };
+const mobile = () => window.matchMedia("(max-width: 900px)").matches;
+
+function setReading(on) {
+  $(".app").classList.toggle("reading", on);
+  if (on && mobile()) $("#read-pane").scrollTop = 0;
+}
+
+function backButton() {
+  return `<button class="btn back-btn" id="act-back">${icon("back")}<span>Voltar</span></button>`;
+}
+
+function bindBack() {
+  const back = $("#act-back");
+  if (back) back.onclick = () => setReading(false);
+}
+
+$("#menu-btn").addEventListener("click", () => $(".app").classList.add("nav-open"));
+$("#scrim").addEventListener("click", () => $(".app").classList.remove("nav-open"));
+$("#mobile-collect").addEventListener("click", () => startCollect());
+
 function showPage(page) {
   state.page = page;
+  $(".app").classList.remove("nav-open");
+  if (page !== "reader") setReading(false);
+  $("#mobile-title").textContent = page === "reader" ? VIEW_TITLES[state.view] : PAGE_TITLES[page];
   for (const id of ["reader", "fontes", "erros", "saude", "config"]) {
     $(`#page-${id}`).classList.toggle("hidden", id !== page);
   }
@@ -150,6 +174,7 @@ $$(".nav-item").forEach((btn) => {
     if (btn.dataset.view) {
       state.view = btn.dataset.view;
       state.selectedId = null;
+      setReading(false);
       showPage("reader");
       loadItems();
       renderEmptyReader();
@@ -263,6 +288,7 @@ async function selectItem(id) {
     return;
   }
   renderItem(item);
+  setReading(true);
   if (!item.is_read) setFlag(item, "is_read", true, false);
 }
 
@@ -272,6 +298,7 @@ function renderItem(item) {
   const levelLabel = { critico: "Prioridade crítica", alto: "Prioridade alta", normal: "Por que está aqui" }[item.level];
   $("#read-pane").innerHTML = `
     <div class="read-toolbar">
+      ${backButton()}
       <button class="btn" id="act-article">${icon("book")}<span>Ler artigo aqui</span></button>
       <button class="btn" id="act-open" title="Abre ${esc(hostOf(item.url))} no navegador">${icon("external")}<span>Abrir <span class="host">${esc(hostOf(item.url))}</span></span></button>
       <span class="spacer"></span>
@@ -295,6 +322,7 @@ function renderItem(item) {
       ${related.length ? `<div class="related"><h3>Também citado em</h3>${related.map((r) =>
         `<a data-id="${r.id}">${esc(r.source_name)}: ${esc(r.title)}</a>`).join("")}</div>` : ""}
     </article>`;
+  bindBack();
   $("#act-open").onclick = () => openExternal(item.url);
   $("#act-star").onclick = () => setFlag(item, "starred", !item.starred);
   $("#act-read").onclick = () => setFlag(item, "is_read", !item.is_read);
@@ -569,7 +597,7 @@ async function showCve(cveId, fromItem = null) {
   }).join("") : "";
   $("#read-pane").innerHTML = `
     <div class="read-toolbar">
-      ${fromItem ? `<button class="btn" id="cve-back">← Voltar à notícia</button>` : ""}
+      ${fromItem ? `<button class="btn" id="cve-back">← Voltar à notícia</button>` : backButton()}
       <button class="btn" id="cve-nvd">${icon("external")}<span>Abrir no NVD</span></button>
       <span class="spacer"></span>
     </div>
@@ -597,6 +625,8 @@ async function showCve(cveId, fromItem = null) {
       ${otherRefs.length ? `<h3>Outras referências</h3><ul class="refs">${otherRefs.map((r) => `<li><a href="#" data-url="${esc(r.url)}">${esc(hostOf(r.url))}</a>${tags(r)}</li>`).join("")}</ul>` : ""}
     </article>`;
   if (fromItem) $("#cve-back").onclick = () => renderItem(fromItem);
+  bindBack();
+  setReading(true);
   $("#cve-nvd").onclick = () => openExternal(`https://nvd.nist.gov/vuln/detail/${d.id}`);
   $$(".timeline a[data-id]").forEach((a) => a.onclick = () => selectItem(Number(a.dataset.id)));
   $$(".refs a[data-url]").forEach((a) => a.onclick = (ev) => { ev.preventDefault(); openExternal(a.dataset.url); });

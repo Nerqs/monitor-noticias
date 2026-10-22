@@ -53,6 +53,8 @@ def _quote(parts: list[str]) -> str:
 # --- Coleta diária ------------------------------------------------------------
 
 def install(cfg: dict) -> str:
+    if config.is_android():
+        raise RuntimeError("No Android a coleta roda ao abrir o app. Para avisos no celular, use o Telegram.")
     sched = cfg.get("schedule", {})
     at = _parse_time(sched.get("time"))
     args = ["--so-coletar"] + (["--email"] if sched.get("send_email") else [])
@@ -102,6 +104,8 @@ def _write_cron(line: str | None) -> None:
 
 
 def is_installed() -> bool:
+    if config.is_android():
+        return False
     try:
         if WINDOWS:
             return _run(["schtasks", "/Query", "/TN", TASK_NAME]).returncode == 0
@@ -113,6 +117,9 @@ def is_installed() -> bool:
 def status(cfg: dict | None = None, now: datetime | None = None) -> dict:
     """Diz se o agendamento existe e se a coleta de hoje deveria ter rodado e não rodou."""
     cfg = cfg or config.load_config()
+    if config.is_android():
+        return {"installed": False, "time": "", "missed": False, "android": True,
+                "message": "No Android a coleta roda quando você abre o app."}
     sched = cfg.get("schedule", {})
     installed = is_installed()
     at = _parse_time(sched.get("time"))
@@ -152,6 +159,8 @@ def _autostart_file() -> Path:
 
 
 def install_resident() -> str:
+    if config.is_android():
+        raise RuntimeError("O modo de alertas é só para o computador. No celular, use o Telegram.")
     command = program_command("--residente")
     if WINDOWS:
         result = _run(["schtasks", "/Create", "/F", "/TN", RESIDENT_TASK, "/TR", _quote(command),
@@ -175,6 +184,8 @@ def uninstall_resident() -> str:
 
 
 def resident_installed() -> bool:
+    if config.is_android():
+        return False
     try:
         if WINDOWS:
             return _run(["schtasks", "/Query", "/TN", RESIDENT_TASK]).returncode == 0

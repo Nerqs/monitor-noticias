@@ -99,6 +99,22 @@ leitor. Para fazer à mão:
 - **Linux:** `crontab -e` e adicione
   `0 7 * * 1-5 ~/MonitorNoticias/MonitorNoticias --so-coletar --email`.
 
+## App Android
+
+O mesmo programa roda no celular: coleta, prioridade, versões afetadas, EPSS, página do CVE, filtros, busca,
+curtidas e envio para Telegram/Discord/Teams. A tela se adapta ao celular (menu lateral, lista e notícia em
+telas separadas).
+
+- **Instalar:** baixe `MonitorNoticias-android.apk` em Releases (ou no artefato do GitHub Actions), abra no
+  celular e permita "instalar apps de fontes desconhecidas" para o navegador ou gerenciador de arquivos.
+- **Coleta:** acontece quando você abre o app (dá para desligar em Configurações) e pelo botão de atualizar.
+  O Android não deixa apps coletarem escondidos sem gastar bateria; para avisos na hora, deixe o envio para o
+  Telegram ligado no computador.
+- **Diferenças:** sem agendamento, sem modo de alertas na bandeja e sem verificação de atualização. O artigo
+  completo usa uma extração mais simples (sem lxml). Senhas e tokens ficam num arquivo na pasta privada do app.
+- **Gerar o .apk à mão:** `pip install briefcase` e `briefcase package android -p debug-apk` (o Briefcase baixa o
+  Java e o SDK do Android sozinho).
+
 ## E-mail
 
 Em **Configurações → E-mail**, escolha o provedor (os campos do servidor são preenchidos sozinhos),
