@@ -103,7 +103,9 @@ def create_app(token: str = API_TOKEN) -> Flask:
     def email_preview():
         if not _same(request.args.get("t"), token):
             abort(403)
-        _subject, html, _ids = emailer.build_digest(config.load_config(), only_new=request.args.get("all") != "1")
+        area = "games" if request.args.get("area") == "games" else "tech"
+        _subject, html, _ids = emailer.build_digest(config.load_config(), only_new=request.args.get("all") != "1",
+                                                    area=area)
         return html
 
     # --- Notícias ---------------------------------------------------------
@@ -128,7 +130,7 @@ def create_app(token: str = API_TOKEN) -> Flask:
             abort(404)
         item["has_article"] = bool(item.pop("article_html", None))
         item["related"] = db.related_by_cve(item)
-        item["affinity_terms"] = preferences.explain(item, preferences.get_model())
+        item["affinity_terms"] = preferences.explain(item, preferences.model_for(item))
         return jsonify(item)
 
     @app.get("/api/items/<int:item_id>/article")
@@ -155,20 +157,22 @@ def create_app(token: str = API_TOKEN) -> Flask:
             abort(400)
         if data.get("flag") == "liked":
             preferences.refresh()
-            return jsonify({"ok": True, "preferences": preferences.status()})
+            item = db.get_item(item_id) or {}
+            return jsonify({"ok": True, "preferences": preferences.status(config.area_of(item.get("category")))})
         return jsonify({"ok": True})
 
     @app.get("/api/preferences")
     def preferences_status():
-        return jsonify(preferences.status())
+        return jsonify(preferences.status(request.args.get("area", "tech")))
 
     @app.post("/api/preferences/reset")
     def preferences_reset():
+        area = "games" if body().get("area") == "games" else "tech"
         conn = db.connect()
-        conn.execute("UPDATE items SET liked=0")
+        conn.execute("UPDATE items SET liked=0 WHERE " + ("category='games'" if area == "games" else "category<>'games'"))
         conn.commit()
         preferences.refresh()
-        return jsonify(preferences.status())
+        return jsonify(preferences.status(area))
 
     @app.post("/api/items/mark-all-read")
     def items_mark_all():
@@ -337,12 +341,15 @@ def create_app(token: str = API_TOKEN) -> Flask:
             abort(400)
         current = config.load_config()
         before = json.dumps([current.get("filters"), current.get("interests", {}).get("versions")], sort_keys=True)
+        games_before = json.dumps(current.get("games"), sort_keys=True)
         for section, values in data["config"].items():
             if isinstance(values, dict) and isinstance(current.get(section), dict):
                 current[section].update(values)
         config.save_config(current)
         after = json.dumps([current.get("filters"), current.get("interests", {}).get("versions")], sort_keys=True)
         rescored = cveinfo.rescore_all(current) if before != after else 0
+        if json.dumps(current.get("games"), sort_keys=True) != games_before:
+            rescored += pipeline.rescore_games(current)
         return jsonify({"ok": True, "rescored": rescored})
 
     @app.post("/api/email/password")
@@ -363,7 +370,9 @@ def create_app(token: str = API_TOKEN) -> Flask:
 
     @app.post("/api/email/send")
     def email_send():
-        return jsonify(emailer.send_digest(only_new=not body().get("all")))
+        area = body().get("area")
+        return jsonify(emailer.send_digest(only_new=not body().get("all"),
+                                           area=area if area in ("tech", "games") else None))
 
     @app.post("/api/email/oauth/start")
     def oauth_start():

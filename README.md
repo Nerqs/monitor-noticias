@@ -10,6 +10,10 @@ resumo bonito por e-mail.
 
 - **Coleta** 25 fontes de uma vez (RSS e APIs oficiais): CISA KEV, NVD, GitHub Advisories, Microsoft MSRC,
   CERT.br, BleepingComputer, The Hacker News, Ars Technica, Hacker News, Tecnoblog e outras.
+- **Área de games separada**: notícias de jogos ficam num menu próprio (Destaques, Meus jogos, Para você,
+  Favoritos), sem misturar com tecnologia. Vem com 29 fontes, 19 ligadas (IGN Brasil, The Enemy, Voxel, GameBlast,
+  MeuPlayStation, IGN, GameSpot, Eurogamer, PC Gamer...), destaque para lançamentos, jogos grátis e eventos,
+  curtidas que aprendem separado e um resumo de games num e-mail próprio.
 - **Prioriza** cada notícia: falhas já exploradas (CISA KEV), CVSS 9 ou mais, termos como *zero-day* e
   *RCE*, e qualquer menção às tecnologias que você usa (PHP, MariaDB, Laravel, Node.js...).
 - **Aprende seu gosto**: marque notícias com *Gostei* ou *Não curti* e a aba **Para você** passa a ordenar

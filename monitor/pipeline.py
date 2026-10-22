@@ -70,7 +70,7 @@ def process_items(source: dict, raw_items: list[dict], cfg: dict, run_id: int | 
     """Pontua e grava as notícias de uma fonte. Devolve quantas são novas."""
     new = 0
     fetched_at = db.now_iso()
-    model = preferences.get_model()
+    model = preferences.get_model(config.area_of(source["category"]))
     for raw in raw_items:
         scored = scoring.score_item(raw, source["category"], cfg)
         if raw.get("nvd_raw") and raw.get("cves"):
@@ -98,6 +98,29 @@ def process_items(source: dict, raw_items: list[dict], cfg: dict, run_id: int | 
         if db.insert_item(item):
             new += 1
     return new
+
+
+def rescore_games(cfg: dict) -> int:
+    """Refaz a nota das notícias de games depois de mudar os jogos seguidos ou os destaques."""
+    conn = db.connect()
+    rows = [dict(r) for r in conn.execute(
+        "SELECT id, category, title, summary, matched_tech, base_score, base_reasons, score, level, reasons, muted "
+        "FROM items WHERE category='games'"
+    ).fetchall()]
+    changed = 0
+    for item in rows:
+        scored = scoring.score_game(item, cfg)
+        item.update(base_score=scored["score"], base_reasons=scored["reasons"], matched_tech=scored["matched_tech"])
+        final = scoring.finalize(item, cfg)
+        conn.execute("UPDATE items SET base_score=?, base_reasons=?, matched_tech=?, score=?, level=?, reasons=?, "
+                     "muted=? WHERE id=?", (item["base_score"], item["base_reasons"], item["matched_tech"],
+                                           final["score"], final["level"], final["reasons"], final["muted"],
+                                           item["id"]))
+        changed += 1
+    conn.commit()
+    if changed:
+        preferences.refresh()  # "jogos seguidos" também entram no gosto aprendido
+    return changed
 
 
 def test_source(source: dict) -> dict:

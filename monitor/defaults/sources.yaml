@@ -5,11 +5,14 @@
 #   name      nome exibido
 #   type      rss | cisa_kev | nvd | github_advisories | scrape
 #   url       endereço do feed, da API ou da página
-#   category  seguranca | tecnologia
+#   category  seguranca | tecnologia | games (games ficam numa área separada do leitor)
 #   language  pt | en
 #   enabled   true | false
 # Para type: scrape, informe também:
 #   item_selector, title_selector, link_selector e (opcional) summary_selector
+
+# Pacotes de fontes que já foram acrescentados a esta lista (não mexa).
+seeded: [games]
 
 sources:
   # --- Segurança: fontes oficiais ---
@@ -192,3 +195,209 @@ sources:
     category: tecnologia
     language: pt
     enabled: true
+
+  # --- Games (área separada do leitor) ---
+  - id: ign-brasil
+    name: IGN Brasil
+    type: rss
+    url: https://br.ign.com/feed.xml
+    category: games
+    language: pt
+    enabled: true
+  - id: the-enemy
+    name: The Enemy
+    type: rss
+    url: https://www.theenemy.com.br/rss
+    category: games
+    language: pt
+    enabled: true
+  - id: voxel
+    name: Voxel (TecMundo)
+    type: rss
+    url: https://www.tecmundo.com.br/voxel/rss
+    category: games
+    language: pt
+    enabled: true
+  - id: gameblast
+    name: GameBlast
+    type: rss
+    url: https://www.gameblast.com.br/feeds/posts/default
+    category: games
+    language: pt
+    enabled: true
+  - id: meups
+    name: MeuPlayStation
+    type: rss
+    url: https://meups.com.br/feed/
+    category: games
+    language: pt
+    enabled: true
+  - id: critical-hits
+    name: Critical Hits
+    type: rss
+    url: https://criticalhits.com.br/feed/
+    category: games
+    language: pt
+    enabled: true
+  - id: adrenaline
+    name: Adrenaline
+    type: rss
+    url: https://adrenaline.com.br/feed/
+    category: games
+    language: pt
+    enabled: true
+  - id: arkade
+    name: Arkade
+    type: rss
+    url: https://arkade.com.br/feed/
+    category: games
+    language: pt
+    enabled: true
+  - id: playstation-blog-br
+    name: PlayStation Blog (Brasil)
+    type: rss
+    url: https://blog.br.playstation.com/feed/
+    category: games
+    language: pt
+    enabled: true
+  - id: xbox-wire-br
+    name: Xbox Wire em Português
+    type: rss
+    url: https://news.xbox.com/pt-br/feed/
+    category: games
+    language: pt
+    enabled: true
+  - id: nintendo-blast
+    name: Nintendo Blast
+    type: rss
+    url: https://www.nintendoblast.com.br/feeds/posts/default
+    category: games
+    language: pt
+    enabled: false
+  - id: playstation-blast
+    name: PlayStation Blast
+    type: rss
+    url: https://www.playstationblast.com.br/feeds/posts/default
+    category: games
+    language: pt
+    enabled: false
+  # Internacionais
+  - id: ign
+    name: IGN
+    type: rss
+    url: https://feeds.feedburner.com/ign/games-all
+    category: games
+    language: en
+    enabled: true
+  - id: gamespot
+    name: GameSpot
+    type: rss
+    url: https://www.gamespot.com/feeds/news/
+    category: games
+    language: en
+    enabled: true
+  - id: polygon
+    name: Polygon
+    type: rss
+    url: https://www.polygon.com/rss/index.xml
+    category: games
+    language: en
+    enabled: true
+  - id: kotaku
+    name: Kotaku
+    type: rss
+    url: https://kotaku.com/rss
+    category: games
+    language: en
+    enabled: true
+  - id: eurogamer
+    name: Eurogamer
+    type: rss
+    url: https://www.eurogamer.net/feed
+    category: games
+    language: en
+    enabled: true
+  - id: pcgamer
+    name: PC Gamer
+    type: rss
+    url: https://www.pcgamer.com/rss/
+    category: games
+    language: en
+    enabled: true
+  - id: rockpapershotgun
+    name: Rock Paper Shotgun
+    type: rss
+    url: https://www.rockpapershotgun.com/feed
+    category: games
+    language: en
+    enabled: true
+  - id: vgc
+    name: Video Games Chronicle (VGC)
+    type: rss
+    url: https://www.videogameschronicle.com/feed/
+    category: games
+    language: en
+    enabled: true
+  - id: gamesindustry
+    name: GamesIndustry.biz
+    type: rss
+    url: https://www.gamesindustry.biz/feed
+    category: games
+    language: en
+    enabled: true
+  - id: playstation-blog
+    name: PlayStation Blog
+    type: rss
+    url: https://blog.playstation.com/feed/
+    category: games
+    language: en
+    enabled: false
+  - id: xbox-wire
+    name: Xbox Wire
+    type: rss
+    url: https://news.xbox.com/en-us/feed/
+    category: games
+    language: en
+    enabled: false
+  - id: nintendolife
+    name: Nintendo Life
+    type: rss
+    url: https://www.nintendolife.com/feeds/latest
+    category: games
+    language: en
+    enabled: false
+  - id: pushsquare
+    name: Push Square (PlayStation)
+    type: rss
+    url: https://www.pushsquare.com/feeds/latest
+    category: games
+    language: en
+    enabled: false
+  - id: purexbox
+    name: Pure Xbox
+    type: rss
+    url: https://www.purexbox.com/feeds/latest
+    category: games
+    language: en
+    enabled: false
+  - id: gematsu
+    name: Gematsu (Japão)
+    type: rss
+    url: https://www.gematsu.com/feed
+    category: games
+    language: en
+    enabled: false
+  - id: gamedeveloper
+    name: Game Developer
+    type: rss
+    url: https://www.gamedeveloper.com/rss.xml
+    category: games
+    language: en
+    enabled: false
+  - id: gamingonlinux
+    name: GamingOnLinux
+    type: rss
+    url: https://www.gamingonlinux.com/article_rss.php
+    category: games
+    language: en
+    enabled: false

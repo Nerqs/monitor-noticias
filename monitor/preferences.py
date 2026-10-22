@@ -10,6 +10,9 @@ sobre palavras do título e do resumo, a fonte e as tecnologias citadas:
   para uma escala de 0 a 100 (50 = neutra).
 
 Com menos de ``MIN_LIKES`` curtidas o modelo fica inativo e tudo vale 50.
+
+Tecnologia e games aprendem separados: curtir notícias de games não muda a
+ordem das notícias de tecnologia (e vice-versa).
 """
 
 from __future__ import annotations
@@ -19,7 +22,7 @@ import re
 import threading
 from collections import Counter
 
-from . import db
+from . import config, db
 
 MIN_LIKES = 3
 ALPHA = 1.0  # suavização de Laplace
@@ -36,7 +39,8 @@ segundo ainda agora hoje semana anos ano lança lançou anuncia anunciou chega v
 """.split())
 
 _lock = threading.Lock()
-_model: dict | None = None
+_model: dict | None = None  # {"tech": modelo ou {}, "games": modelo ou {}}
+AREAS = ("tech", "games")
 _token_re = re.compile(r"[a-z0-9áàâãéêíóôõúüç][a-z0-9áàâãéêíóôõúüç.+#-]*[a-z0-9+#]|[a-z0-9]", re.IGNORECASE)
 
 
@@ -62,10 +66,14 @@ def _doc_freq(items: list[dict]) -> Counter:
     return counts
 
 
-def build_model() -> dict | None:
+def _area_sql(area: str) -> str:
+    return "category='games'" if area == "games" else "category<>'games'"
+
+
+def build_model(area: str = "tech") -> dict | None:
     conn = db.connect()
     rows = [dict(r) for r in conn.execute(
-        "SELECT id, title, summary, source_id, matched_tech, category, liked FROM items"
+        "SELECT id, title, summary, source_id, matched_tech, category, liked FROM items WHERE " + _area_sql(area)
     ).fetchall()]
     liked = [r for r in rows if r["liked"] == 1]
     if len(liked) < MIN_LIKES:
@@ -124,36 +132,47 @@ def explain(item: dict, model: dict | None, limit: int = 4) -> list[str]:
     return labels
 
 
-def get_model() -> dict | None:
+def get_model(area: str = "tech") -> dict | None:
     global _model
     with _lock:
         if _model is None:
-            _model = build_model() or {}
-        return _model or None
+            _model = {a: build_model(a) or {} for a in AREAS}
+        return _model.get(area) or None
+
+
+def model_for(item: dict) -> dict | None:
+    return get_model(config.area_of(item.get("category")))
 
 
 def refresh() -> dict | None:
-    """Reconstrói o modelo e recalcula a afinidade de todas as notícias."""
+    """Reconstrói os modelos e recalcula a afinidade de todas as notícias.
+
+    Devolve o modelo de tecnologia (o de games fica em ``get_model("games")``).
+    """
     global _model
     with _lock:
-        _model = build_model() or {}
-        model = _model or None
+        _model = {a: build_model(a) or {} for a in AREAS}
+        models = {a: _model[a] or None for a in AREAS}
     conn = db.connect()
     rows = [dict(r) for r in conn.execute(
         "SELECT id, title, summary, source_id, matched_tech, category FROM items"
     ).fetchall()]
-    conn.executemany("UPDATE items SET affinity=? WHERE id=?", [(affinity(r, model), r["id"]) for r in rows])
+    conn.executemany("UPDATE items SET affinity=? WHERE id=?",
+                     [(affinity(r, models[config.area_of(r["category"])]), r["id"]) for r in rows])
     conn.commit()
-    return model
+    return models["tech"]
 
 
-def status() -> dict:
-    model = get_model()
+def status(area: str = "tech") -> dict:
+    area = area if area in AREAS else "tech"
+    model = get_model(area)
     conn = db.connect()
-    likes = conn.execute("SELECT COUNT(*) FROM items WHERE liked=1").fetchone()[0]
-    dislikes = conn.execute("SELECT COUNT(*) FROM items WHERE liked=-1").fetchone()[0]
+    where = _area_sql(area)
+    likes = conn.execute(f"SELECT COUNT(*) FROM items WHERE liked=1 AND {where}").fetchone()[0]
+    dislikes = conn.execute(f"SELECT COUNT(*) FROM items WHERE liked=-1 AND {where}").fetchone()[0]
     top = []
     if model:
         top = [f.split(":", 1)[1] for f, w in sorted(model["weights"].items(), key=lambda kv: -kv[1])
                if w > 0 and f.startswith(("w:", "tech:"))][:12]
-    return {"active": bool(model), "likes": likes, "dislikes": dislikes, "min_likes": MIN_LIKES, "top_terms": top}
+    return {"area": area, "active": bool(model), "likes": likes, "dislikes": dislikes, "min_likes": MIN_LIKES,
+            "top_terms": top}

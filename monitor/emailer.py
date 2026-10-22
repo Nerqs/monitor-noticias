@@ -34,6 +34,8 @@ SECTION_TITLES = {
     "criticos": "Críticos e importantes",
     "seguranca": "Outras notícias de segurança",
     "tecnologia": "Tecnologia",
+    "games_destaques": "Destaques de games",
+    "games": "Outras notícias de games",
 }
 
 
@@ -41,25 +43,45 @@ class EmailError(Exception):
     pass
 
 
-def build_digest(cfg: dict, only_new: bool = True) -> tuple[str, str, list[int]]:
-    """Devolve (assunto, html, ids das notícias incluídas)."""
-    limit = int(cfg.get("email", {}).get("max_items_per_section", 15))
-    sections = db.items_for_email(only_new=only_new, limit_per_section=limit)
+def _limit(cfg: dict, area: str) -> int:
+    section = cfg.get("games", {}) if area == "games" else cfg.get("email", {})
+    return int(section.get("max_items_per_section") or cfg.get("email", {}).get("max_items_per_section", 15))
+
+
+def build_digest(cfg: dict, only_new: bool = True, area: str = "tech") -> tuple[str, str, list[int]]:
+    """Devolve (assunto, html, ids das notícias incluídas). ``area``: "tech" ou "games"."""
+    sections = db.items_for_email(only_new=only_new, limit_per_section=_limit(cfg, area), area=area)
     run = db.last_run()
-    errors = db.errors_for_run(run["id"]) if run else []
+    games_source = {s["id"] for s in config.load_sources() if s.get("category") == config.GAMES}
+    errors = [e for e in (db.errors_for_run(run["id"]) if run else [])
+              if (e["source_id"] in games_source) == (area == "games")]
     ids = [item["id"] for items in sections.values() for item in items]
-    n_crit = sum(1 for i in sections["criticos"] if i["level"] == "critico")
     today = datetime.now().strftime("%d/%m/%Y %H:%M")
-    subject = f"Monitor de notícias {today}: {n_crit} críticas, {len(ids)} no total"
+    if area == "games":
+        n_high = len(sections["games_destaques"])
+        n_following = sum(1 for items in sections.values() for i in items if i["matched_tech"])
+        subject = f"Monitor de games {today}: {n_high} destaques, {len(ids)} no total"
+        heading, preheader = "Monitor de games", f"{n_high} destaques · {len(ids)} notícias de games"
+        stats = [(n_high, "destaques", "#c4b5fd"), (n_following, "dos jogos que você segue", "#ffffff"),
+                 (len(ids), "notícias de games", "#ffffff")]
+    else:
+        n_crit = sum(1 for i in sections["criticos"] if i["level"] == "critico")
+        subject = f"Monitor de notícias {today}: {n_crit} críticas, {len(ids)} no total"
+        heading, preheader = "Monitor de notícias", f"{n_crit} críticas · {len(ids)} notícias selecionadas para você"
+        n_security = sum(1 for i in sections["criticos"] if i["category"] == "seguranca") + len(sections["seguranca"])
+        n_tech = len(sections["tecnologia"]) + sum(1 for i in sections["criticos"] if i["category"] == "tecnologia")
+        stats = [(n_crit, "críticas", "#f87171"), (n_security, "de segurança", "#ffffff"),
+                 (n_tech, "de tecnologia", "#ffffff")]
     html = _env.get_template("email.html").render(
+        area=area,
+        heading=heading,
+        preheader=preheader,
+        stats=stats,
         sections=sections,
         titles=SECTION_TITLES,
         errors=errors,
         generated=today,
         total=len(ids),
-        n_critical=n_crit,
-        n_security=sum(1 for i in sections["criticos"] if i["category"] == "seguranca") + len(sections["seguranca"]),
-        n_tech=len(sections["tecnologia"]) + sum(1 for i in sections["criticos"] if i["category"] == "tecnologia"),
     )
     return subject, html, ids
 
@@ -143,16 +165,29 @@ def send_message(cfg: dict, subject: str, html: str, text: str) -> None:
         raise EmailError(f"Falha ao enviar pelo servidor {host}:{port}: {exc}")
 
 
-def send_digest(cfg: dict | None = None, only_new: bool = True) -> dict:
+def send_digest(cfg: dict | None = None, only_new: bool = True, area: str | None = None) -> dict:
+    """Envia o resumo de tecnologia e, se ligado, o de games num e-mail separado.
+
+    ``area`` "tech" ou "games" envia só aquele resumo.
+    """
     cfg = cfg or config.load_config()
-    subject, html, ids = build_digest(cfg, only_new=only_new)
-    if not ids:
+    areas = [area] if area else ["tech"] + (["games"] if cfg.get("games", {}).get("email", True) else [])
+    result = {"sent": False, "items": 0, "subjects": []}
+    for name in areas:
+        subject, html, ids = build_digest(cfg, only_new=only_new, area=name)
+        if not ids:
+            continue
+        sections = db.items_for_email(only_new=only_new, limit_per_section=_limit(cfg, name), area=name)
+        send_message(cfg, subject, html, _plain_text(sections))
+        db.mark_emailed(ids)
+        result["sent"] = True
+        result["items"] += len(ids)
+        result["subjects"].append(subject)
+    if not result["sent"]:
         return {"sent": False, "reason": "Nenhuma notícia nova para enviar."}
-    limit = int(cfg.get("email", {}).get("max_items_per_section", 15))
-    text = _plain_text(db.items_for_email(only_new=only_new, limit_per_section=limit))
-    send_message(cfg, subject, html, text)
-    db.mark_emailed(ids)
-    return {"sent": True, "items": len(ids), "subject": subject}
+    result["subject"] = result["subjects"][0]
+    result["emails"] = len(result["subjects"])
+    return result
 
 
 def send_test(cfg: dict | None = None) -> None:

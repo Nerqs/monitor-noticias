@@ -315,6 +315,9 @@ def fts_query(text: str) -> str:
     return query
 
 
+GAME_VIEWS = {"games", "games_destaques", "games_meus", "games_paravoce", "games_favoritos"}
+
+
 def query_items(
     view: str = "criticos",
     search: str = "",
@@ -330,17 +333,23 @@ def query_items(
         where.append("muted=1")
     else:
         where.append("muted=0")
+        # Games têm uma área própria: não aparecem nas listas de tecnologia e vice-versa.
+        where.append("category='games'" if view in GAME_VIEWS else "category<>'games'")
     if view == "criticos":
         where.append("level IN ('critico','alto')")
     elif view == "seguranca":
         where.append("category='seguranca'")
     elif view == "tecnologia":
         where.append("category='tecnologia'")
-    elif view == "favoritos":
+    elif view in ("favoritos", "games_favoritos"):
         where.append("starred=1")
     elif view == "minhas":
         where.append("(matched_tech <> '' OR version_verdict='afeta')")
-    elif view == "paravoce":
+    elif view == "games_destaques":
+        where.append("level IN ('critico','alto')")
+    elif view == "games_meus":
+        where.append("matched_tech <> ''")
+    elif view in ("paravoce", "games_paravoce"):
         where.append("liked >= 0")
         sort = "afinidade"
     if unread_only:
@@ -376,7 +385,7 @@ def query_items(
         sql += " ORDER BY f.rank"
     elif sort == "data":
         sql += " ORDER BY COALESCE(published, fetched_at) DESC"
-    elif view == "criticos":
+    elif view in ("criticos", "games_destaques"):
         sql += " ORDER BY score DESC, affinity DESC, COALESCE(published, fetched_at) DESC"
     else:
         sql += " ORDER BY COALESCE(published, fetched_at) DESC"
@@ -433,34 +442,47 @@ def save_article(item_id: int, html: str) -> None:
 def counts() -> dict:
     row = connect().execute(
         """SELECT
-            SUM(level IN ('critico','alto') AND is_read=0) AS criticos,
+            SUM(level IN ('critico','alto') AND is_read=0 AND category<>'games') AS criticos,
             SUM(category='seguranca' AND is_read=0) AS seguranca,
             SUM(category='tecnologia' AND is_read=0) AS tecnologia,
-            SUM((matched_tech <> '' OR version_verdict='afeta') AND is_read=0) AS minhas,
-            SUM(starred=1) AS favoritos,
-            SUM(liked >= 0 AND is_read=0 AND affinity >= 65) AS paravoce,
-            SUM(is_read=0) AS todos
+            SUM((matched_tech <> '' OR version_verdict='afeta') AND is_read=0 AND category<>'games') AS minhas,
+            SUM(starred=1 AND category<>'games') AS favoritos,
+            SUM(liked >= 0 AND is_read=0 AND affinity >= 65 AND category<>'games') AS paravoce,
+            SUM(is_read=0 AND category<>'games') AS todos,
+            SUM(category='games' AND level IN ('critico','alto') AND is_read=0) AS games_destaques,
+            SUM(category='games' AND matched_tech <> '' AND is_read=0) AS games_meus,
+            SUM(category='games' AND liked >= 0 AND is_read=0 AND affinity >= 65) AS games_paravoce,
+            SUM(category='games' AND starred=1) AS games_favoritos,
+            SUM(category='games' AND is_read=0) AS games
         FROM items WHERE muted=0"""
     ).fetchone()
     return {k: (row[k] or 0) for k in row.keys()}
 
 
-def items_for_email(only_new: bool = True, limit_per_section: int = 15) -> dict[str, list[dict]]:
+def items_for_email(only_new: bool = True, limit_per_section: int = 15, area: str = "tech") -> dict[str, list[dict]]:
+    """Seções do resumo por e-mail. ``area`` "tech" (segurança e tecnologia) ou "games"."""
     base = "SELECT * FROM items WHERE muted=0" + (" AND emailed=0" if only_new else "")
+    recent = " ORDER BY COALESCE(published, fetched_at) DESC LIMIT ?"
     conn = connect()
-    sections = {
-        "criticos": conn.execute(
-            base + " AND level IN ('critico','alto') ORDER BY score DESC LIMIT ?", (limit_per_section,)
-        ).fetchall(),
-        "seguranca": conn.execute(
-            base + " AND category='seguranca' AND level='normal' "
-            "ORDER BY COALESCE(published, fetched_at) DESC LIMIT ?", (limit_per_section,)
-        ).fetchall(),
-        "tecnologia": conn.execute(
-            base + " AND category='tecnologia' AND level='normal' "
-            "ORDER BY COALESCE(published, fetched_at) DESC LIMIT ?", (limit_per_section,)
-        ).fetchall(),
-    }
+    if area == "games":
+        base += " AND category='games'"
+        sections = {
+            "games_destaques": conn.execute(
+                base + " AND level IN ('critico','alto') ORDER BY score DESC LIMIT ?", (limit_per_section,)
+            ).fetchall(),
+            "games": conn.execute(base + " AND level='normal'" + recent, (limit_per_section,)).fetchall(),
+        }
+    else:
+        base += " AND category<>'games'"
+        sections = {
+            "criticos": conn.execute(
+                base + " AND level IN ('critico','alto') ORDER BY score DESC LIMIT ?", (limit_per_section,)
+            ).fetchall(),
+            "seguranca": conn.execute(base + " AND category='seguranca' AND level='normal'" + recent,
+                                      (limit_per_section,)).fetchall(),
+            "tecnologia": conn.execute(base + " AND category='tecnologia' AND level='normal'" + recent,
+                                       (limit_per_section,)).fetchall(),
+        }
     return {k: [dict(r) for r in v] for k, v in sections.items()}
 
 
@@ -635,7 +657,7 @@ def update_item(item_id: int, **fields) -> None:
 
 def all_items_for_rescore() -> list[dict]:
     rows = connect().execute(
-        "SELECT id, source_id, title, summary, cves, base_score, base_reasons, matched_tech, epss, epss_pct, "
+        "SELECT id, source_id, category, title, summary, cves, base_score, base_reasons, matched_tech, epss, epss_pct, "
         "version_verdict, version_note, muted, score, level, reasons FROM items"
     ).fetchall()
     return [dict(r) for r in rows]
@@ -654,7 +676,7 @@ def items_for_alert(flag: str, limit: int = 10) -> list[dict]:
     if flag not in ("chatted", "notified"):
         raise ValueError(flag)
     rows = connect().execute(
-        f"SELECT * FROM items WHERE muted=0 AND {flag}=0 AND level='critico' "
+        f"SELECT * FROM items WHERE muted=0 AND {flag}=0 AND level='critico' AND category<>'games' "
         "AND fetched_at >= datetime('now', '-2 days') ORDER BY score DESC LIMIT ?", (limit,)
     ).fetchall()
     return [dict(r) for r in rows]
@@ -662,7 +684,7 @@ def items_for_alert(flag: str, limit: int = 10) -> list[dict]:
 
 def items_for_chat(limit: int = 10) -> list[dict]:
     rows = connect().execute(
-        "SELECT * FROM items WHERE muted=0 AND chatted=0 AND level IN ('critico','alto') "
+        "SELECT * FROM items WHERE muted=0 AND chatted=0 AND level IN ('critico','alto') AND category<>'games' "
         "AND fetched_at >= datetime('now', '-2 days') ORDER BY score DESC LIMIT ?", (limit,)
     ).fetchall()
     return [dict(r) for r in rows]

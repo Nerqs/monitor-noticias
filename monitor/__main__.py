@@ -47,7 +47,8 @@ def run_headless(send_email: bool) -> int:
     if send_email and "email" not in summary:
         try:
             result = emailer.send_digest()
-            print(result.get("reason") or f"E-mail enviado com {result['items']} notícias.")
+            extra = " (dois e-mails: tecnologia e games)" if result.get("emails", 1) > 1 else ""
+            print(result.get("reason") or f"E-mail enviado com {result['items']} notícias{extra}.")
         except emailer.EmailError as exc:
             print(f"E-mail não enviado: {exc}")
             return 1
