@@ -68,6 +68,9 @@ def create_app(token: str = API_TOKEN) -> Flask:
                 f"img-src {images}; connect-src 'self'; frame-src 'self' about:; object-src 'none'; "
                 "base-uri 'self'; form-action 'self'; frame-ancestors 'self'"
             )
+        if request.path.startswith("/api/"):
+            # A janela (WebView2/Android) não pode reaproveitar uma lista antiga.
+            response.headers["Cache-Control"] = "no-store"
         response.headers["X-Content-Type-Options"] = "nosniff"
         response.headers["Referrer-Policy"] = "no-referrer"
         response.headers["Cross-Origin-Opener-Policy"] = "same-origin"
