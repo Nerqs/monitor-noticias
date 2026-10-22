@@ -11,7 +11,7 @@ Linux
   Rode ./MonitorNoticias
   Se a janela própria não abrir, o programa abre no navegador.
 
-Seus dados (notícias, fontes, configurações e o arquivo monitor.log) ficam na
+Seus dados (notícias, fontes, configurações e a pasta logs) ficam na
 pasta "data", ao lado do programa. Para atualizar, baixe a versão nova e copie
 a pasta "data" para ela.
 
@@ -19,3 +19,7 @@ Coleta agendada (sem abrir a janela):
   MonitorNoticias.exe --so-coletar --email
 
 Mais detalhes: https://github.com/Nerqs/monitor-noticias
+
+Outros parâmetros:
+  --diagnostico   confere se está tudo funcionando e diz o que corrigir
+  --residente     fica perto do relógio e avisa quando surge uma falha crítica

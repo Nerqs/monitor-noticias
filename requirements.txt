@@ -8,3 +8,5 @@ readability-lxml>=0.8.1
 lxml_html_clean>=0.1
 keyring>=24
 pywebview>=5.0
+pystray>=0.19
+pillow>=10

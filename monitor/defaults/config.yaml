@@ -6,11 +6,24 @@ collection:
   max_items_per_source: 40
   nvd_api_key: ""         # opcional, aumenta o limite da API do NVD
   github_token: ""        # opcional, aumenta o limite da API do GitHub
+  max_download_mb: 10     # respostas maiores que isso são cortadas
+  allow_private_networks: false  # true libera sites da rede interna (intranet)
+
+enrichment:
+  epss: true              # consulta a probabilidade de exploração (FIRST.org)
+  max_nvd_lookups: 15     # consultas ao NVD por coleta para checar versões afetadas
 
 interests:
   # Tecnologias que você usa. Notícias que citam estes termos sobem de prioridade.
   # Prefira nomes específicos ("node.js" em vez de "node") para evitar falsos alertas.
   technologies: [php, mariadb, laravel, node.js, nodejs, npm]
+  # Versões que você usa. Com elas o programa diz se um CVE afeta a SUA versão.
+  # cpe = "fornecedor:produto" como o NVD chama (php:php, mariadb:mariadb, laravel:framework, nodejs:node.js).
+  versions: []
+
+filters:
+  # Regras pessoais. action: mute (esconde) ou highlight (destaca). source vazio = todas as fontes.
+  rules: []
 
 priority:
   # Termos que indicam gravidade (procurados no título e resumo, sem diferenciar maiúsculas).
@@ -40,7 +53,10 @@ priority:
     - exploit
 
 email:
-  provider: outlook       # outlook | gmail | yahoo | custom
+  provider: outlook       # outlook | office365 | gmail | yahoo | custom
+  auth: password          # password | oauth_microsoft
+  oauth_client_id: ""     # ID do aplicativo registrado no Azure (veja o README)
+  oauth_tenant: ""        # vazio: consumers (Outlook pessoal) ou organizations (Microsoft 365)
   smtp_host: smtp-mail.outlook.com
   smtp_port: 587
   security: starttls      # starttls | ssl | none
@@ -49,6 +65,42 @@ email:
   to_addresses: []
   send_after_collect: false
   max_items_per_section: 15
+
+chat:
+  enabled: false          # manda os destaques para o celular depois de cada coleta
+  provider: telegram      # telegram | discord | teams
+  telegram_chat_id: ""
+  max_items: 10
+
+alerts:
+  interval_minutes: 60    # modo residente: de quanto em quanto tempo coletar
+  scope: criticas         # criticas (só fontes de segurança) | todas
+  only_mine: false        # só avisa o que cita suas tecnologias ou afeta sua versão
+  chat: false             # também manda o alerta para o celular
+
+schedule:
+  time: "07:00"
+  weekdays_only: true
+  send_email: true
+  alert_missed: true      # avisa ao abrir quando a coleta agendada de hoje não rodou
+  installed: false
+
+reader:
+  block_remote_images: false  # bloqueia imagens de outros sites nos artigos (evita rastreamento)
+
+health:
+  silent_days: 7          # avisa quando uma fonte passa esse tempo sem nada novo
+
+maintenance:
+  enabled: true
+  keep_days: 90           # apaga notícias mais velhas (menos favoritas e avaliadas)
+  article_days: 30        # descarta o texto completo salvo depois disso
+
+security:
+  self_audit: true        # confere as bibliotecas do programa na base OSV uma vez por dia
+
+android:
+  collect_on_open: true   # app Android: coleta sempre que o app é aberto
 
 appearance:
   theme: auto             # auto | light | dark

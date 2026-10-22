@@ -60,16 +60,49 @@ jobs:
           path: ${{ matrix.package }}
           retention-days: 30
 
+  android:
+    name: Android
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Instalar o Briefcase
+        run: python -m pip install --upgrade pip briefcase
+
+      - name: Gerar o app Android
+        run: |
+          briefcase create android --no-input
+          briefcase build android --no-input
+          briefcase package android -p debug-apk --no-input
+          mkdir -p pacotes
+          cp dist/*.apk pacotes/MonitorNoticias-android.apk
+          ls -la pacotes
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: MonitorNoticias-Android
+          path: pacotes/MonitorNoticias-android.apk
+          retention-days: 30
+
   release:
     name: Publicar versão
     if: startsWith(github.ref, 'refs/tags/v')
-    needs: build
+    needs: [build, android]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/download-artifact@v8
         with:
           path: pacotes
           merge-multiple: true
+      - name: Gerar SHA256SUMS.txt
+        run: |
+          cd pacotes
+          sha256sum MonitorNoticias-* > SHA256SUMS.txt
+          cat SHA256SUMS.txt
       - uses: softprops/action-gh-release@v3
         with:
           files: pacotes/*

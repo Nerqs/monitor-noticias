@@ -69,6 +69,8 @@
                 {% if item.level == 'critico' %}<span style="background:#dc2626;color:#ffffff;border-radius:4px;padding:1px 6px;font-size:10px;font-weight:700;letter-spacing:.04em;">CRÍTICO</span>&nbsp;
                 {% elif item.level == 'alto' %}<span style="background:#ea580c;color:#ffffff;border-radius:4px;padding:1px 6px;font-size:10px;font-weight:700;letter-spacing:.04em;">ALTO</span>&nbsp;{% endif %}
                 {% if item.kev %}<span style="background:#7c3aed;color:#ffffff;border-radius:4px;padding:1px 6px;font-size:10px;font-weight:700;letter-spacing:.04em;">EXPLORADA</span>&nbsp;{% endif %}
+                {% if item.version_verdict == 'afeta' %}<span style="background:#dc2626;color:#ffffff;border-radius:4px;padding:1px 6px;font-size:10px;font-weight:700;letter-spacing:.04em;" title="{{ item.version_note }}">AFETA VOCÊ</span>&nbsp;{% endif %}
+                {% if item.epss is not none and item.epss >= 0.1 %}<span style="background:#fff7ed;color:#ea580c;border-radius:4px;padding:1px 6px;font-size:10px;font-weight:700;">EPSS {{ (item.epss * 100)|round|int }}%</span>&nbsp;{% endif %}
                 {% for tech in (item.matched_tech or '').split(',') if tech %}<span style="background:#eff4ff;color:#2563eb;border-radius:4px;padding:1px 6px;font-size:11px;font-weight:600;">{{ tech }}</span>&nbsp;{% endfor %}
                 {{ item.source_name }}{% if item.published %} · {{ item.published|local_time }}{% endif %}
               </div>

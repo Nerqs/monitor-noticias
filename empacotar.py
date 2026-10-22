@@ -10,6 +10,7 @@ Resultado:
 
 from __future__ import annotations
 
+import json
 import os
 import shutil
 import subprocess
@@ -22,7 +23,16 @@ NAME = "MonitorNoticias"
 WINDOWS = sys.platform == "win32"
 
 
+def write_build_deps() -> None:
+    """Grava as versões das bibliotecas para a autoauditoria do executável."""
+    from importlib import metadata
+
+    deps = {d.metadata["Name"].lower(): d.version for d in metadata.distributions() if d.metadata.get("Name")}
+    (ROOT / "monitor" / "_build_deps.json").write_text(json.dumps(deps, indent=1, sort_keys=True), encoding="utf-8")
+
+
 def main() -> int:
+    write_build_deps()
     sep = os.pathsep
     args = [
         sys.executable, "-m", "PyInstaller", "--noconfirm", "--clean",
@@ -33,6 +43,8 @@ def main() -> int:
         "--add-data", f"{ROOT / 'monitor' / 'defaults'}{sep}monitor/defaults",
         "--collect-submodules", "keyring.backends",
         "--collect-submodules", "webview",
+        "--collect-submodules", "pystray",
+        "--add-data", f"{ROOT / 'monitor' / '_build_deps.json'}{sep}monitor",
         "--collect-data", "readability",
     ]
     if WINDOWS:
