@@ -157,7 +157,10 @@ def test_data_dir_is_stable_across_threads(monkeypatch, tmp_path):
     monkeypatch.delenv("MONITOR_DATA_DIR")
     monkeypatch.setenv("LOCALAPPDATA", str(tmp_path / "local"))
     monkeypatch.setattr(sys, "frozen", True, raising=False)
-    monkeypatch.setattr(sys, "executable", str(tmp_path / "zip" / "MonitorNoticias.exe"))
+    exe = tmp_path / "zip" / "MonitorNoticias.exe"
+    exe.parent.mkdir()
+    exe.write_bytes(b"")
+    monkeypatch.setattr(sys, "executable", str(exe))
     seen = set()
 
     def worker():
@@ -169,4 +172,5 @@ def test_data_dir_is_stable_across_threads(monkeypatch, tmp_path):
         t.start()
     for t in threads:
         t.join()
-    assert seen == {tmp_path / "zip" / "data"}
+    # samefile: no Windows o resolve() às vezes devolve o mesmo caminho com o prefixo \\?\
+    assert all(path.samefile(tmp_path / "zip" / "data") for path in seen)
