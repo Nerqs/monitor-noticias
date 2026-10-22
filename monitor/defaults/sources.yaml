@@ -1,0 +1,194 @@
+# Fontes de notícias. Edite pelo programa (página "Fontes") ou direto aqui.
+#
+# Campos:
+#   id        identificador único (letras, números, hífen)
+#   name      nome exibido
+#   type      rss | cisa_kev | nvd | github_advisories | scrape
+#   url       endereço do feed, da API ou da página
+#   category  seguranca | tecnologia
+#   language  pt | en
+#   enabled   true | false
+# Para type: scrape, informe também:
+#   item_selector, title_selector, link_selector e (opcional) summary_selector
+
+sources:
+  # --- Segurança: fontes oficiais ---
+  - id: cisa-kev
+    name: CISA KEV (falhas exploradas)
+    type: cisa_kev
+    url: https://www.cisa.gov/sites/default/files/feeds/known_exploited_vulnerabilities.json
+    category: seguranca
+    language: en
+    enabled: true
+  - id: cisa-advisories
+    name: CISA Advisories
+    type: rss
+    url: https://www.cisa.gov/cybersecurity-advisories/all.xml
+    category: seguranca
+    language: en
+    enabled: true
+  - id: nvd-critical
+    name: NVD (CVEs críticos)
+    type: nvd
+    url: https://services.nvd.nist.gov/rest/json/cves/2.0
+    category: seguranca
+    language: en
+    enabled: true
+  - id: github-advisories
+    name: GitHub Security Advisories
+    type: github_advisories
+    url: https://api.github.com/advisories
+    category: seguranca
+    language: en
+    enabled: true
+  - id: msrc
+    name: Microsoft MSRC
+    type: rss
+    url: https://api.msrc.microsoft.com/update-guide/rss
+    category: seguranca
+    language: en
+    enabled: true
+  - id: sans-isc
+    name: SANS ISC
+    type: rss
+    url: https://isc.sans.edu/rssfeed_full.xml
+    category: seguranca
+    language: en
+    enabled: true
+  - id: certbr
+    name: CERT.br
+    type: rss
+    url: https://www.cert.br/rss/certbr-rss.xml
+    category: seguranca
+    language: pt
+    enabled: true
+
+  # --- Segurança: notícias ---
+  - id: bleepingcomputer
+    name: BleepingComputer
+    type: rss
+    url: https://www.bleepingcomputer.com/feed/
+    category: seguranca
+    language: en
+    enabled: true
+  - id: thehackernews
+    name: The Hacker News
+    type: rss
+    url: https://feeds.feedburner.com/TheHackersNews
+    category: seguranca
+    language: en
+    enabled: true
+  - id: securityweek
+    name: SecurityWeek
+    type: rss
+    url: https://www.securityweek.com/feed/
+    category: seguranca
+    language: en
+    enabled: true
+  - id: krebs
+    name: Krebs on Security
+    type: rss
+    url: https://krebsonsecurity.com/feed/
+    category: seguranca
+    language: en
+    enabled: true
+  - id: darkreading
+    name: Dark Reading
+    type: rss
+    url: https://www.darkreading.com/rss.xml
+    category: seguranca
+    language: en
+    enabled: true
+
+  # --- Tecnologia em geral ---
+  - id: arstechnica
+    name: Ars Technica
+    type: rss
+    url: https://feeds.arstechnica.com/arstechnica/index
+    category: tecnologia
+    language: en
+    enabled: true
+  - id: theverge
+    name: The Verge
+    type: rss
+    url: https://www.theverge.com/rss/index.xml
+    category: tecnologia
+    language: en
+    enabled: true
+  - id: techcrunch
+    name: TechCrunch
+    type: rss
+    url: https://techcrunch.com/feed/
+    category: tecnologia
+    language: en
+    enabled: true
+  - id: theregister
+    name: The Register
+    type: rss
+    url: https://www.theregister.com/headlines.atom
+    category: tecnologia
+    language: en
+    enabled: true
+  - id: wired
+    name: Wired
+    type: rss
+    url: https://www.wired.com/feed/rss
+    category: tecnologia
+    language: en
+    enabled: true
+  - id: hackernews
+    name: Hacker News (150+ pontos)
+    type: rss
+    url: https://hnrss.org/frontpage?points=150
+    category: tecnologia
+    language: en
+    enabled: true
+  - id: lobsters
+    name: Lobsters
+    type: rss
+    url: https://lobste.rs/rss
+    category: tecnologia
+    language: en
+    enabled: true
+  - id: github-blog
+    name: GitHub Blog
+    type: rss
+    url: https://github.blog/feed/
+    category: tecnologia
+    language: en
+    enabled: true
+  - id: infoq
+    name: InfoQ
+    type: rss
+    url: https://feed.infoq.com/
+    category: tecnologia
+    language: en
+    enabled: true
+  - id: tecnoblog
+    name: Tecnoblog
+    type: rss
+    url: https://tecnoblog.net/feed/
+    category: tecnologia
+    language: pt
+    enabled: true
+  - id: canaltech
+    name: Canaltech
+    type: rss
+    url: https://canaltech.com.br/rss/
+    category: tecnologia
+    language: pt
+    enabled: true
+  - id: olhardigital
+    name: Olhar Digital
+    type: rss
+    url: https://olhardigital.com.br/feed/
+    category: tecnologia
+    language: pt
+    enabled: true
+  - id: tecmundo
+    name: Tecmundo
+    type: rss
+    url: https://www.tecmundo.com.br/rss
+    category: tecnologia
+    language: pt
+    enabled: true

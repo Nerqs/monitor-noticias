@@ -1,0 +1,281 @@
+<!doctype html>
+<html lang="pt-BR" data-theme="{{ theme }}">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Monitor de notícias</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 24 24%22 fill=%22none%22 stroke=%22%232f6fde%22 stroke-width=%222%22%3E%3Cpath d=%22M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z%22/%3E%3C/svg%3E">
+<link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+<svg xmlns="http://www.w3.org/2000/svg" style="display:none">
+  <defs>
+    <symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="m9 12 2 2 4-4"/></symbol>
+    <symbol id="i-alert" viewBox="0 0 24 24"><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/><path d="M12 9v4M12 17h.01"/></symbol>
+    <symbol id="i-cpu" viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="2"/><rect x="9" y="9" width="6" height="6"/><path d="M9 1v3M15 1v3M9 20v3M15 20v3M20 9h3M20 14h3M1 9h3M1 14h3"/></symbol>
+    <symbol id="i-lock" viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></symbol>
+    <symbol id="i-news" viewBox="0 0 24 24"><path d="M4 22h16a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2H8a2 2 0 0 0-2 2v16a2 2 0 0 1-2 2zm0 0a2 2 0 0 1-2-2v-9c0-1.1.9-2 2-2h2"/><path d="M18 14h-8M15 18h-5M10 6h8v4h-8z"/></symbol>
+    <symbol id="i-star" viewBox="0 0 24 24"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01z"/></symbol>
+    <symbol id="i-inbox" viewBox="0 0 24 24"><path d="M22 12h-6l-2 3h-4l-2-3H2"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/></symbol>
+    <symbol id="i-rss" viewBox="0 0 24 24"><path d="M4 11a9 9 0 0 1 9 9M4 4a16 16 0 0 1 16 16"/><circle cx="5" cy="19" r="1"/></symbol>
+    <symbol id="i-error" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/></symbol>
+    <symbol id="i-sliders" viewBox="0 0 24 24"><path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M1 14h6M9 8h6M17 16h6"/></symbol>
+    <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M23 4v6h-6"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></symbol>
+    <symbol id="i-external" viewBox="0 0 24 24"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6M15 3h6v6M10 14 21 3"/></symbol>
+    <symbol id="i-book" viewBox="0 0 24 24"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2zM22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></symbol>
+    <symbol id="i-check" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></symbol>
+    <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></symbol>
+    <symbol id="i-mail" viewBox="0 0 24 24"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-10 6L2 7"/></symbol>
+    <symbol id="i-sparkle" viewBox="0 0 24 24"><path d="M12 3l1.9 5.6L19.5 10.5l-5.6 1.9L12 18l-1.9-5.6L4.5 10.5l5.6-1.9z"/><path d="M19 3v4M17 5h4M5 17v4M3 19h4"/></symbol>
+    <symbol id="i-up" viewBox="0 0 24 24"><path d="M7 10v12M15 5.88 14 10h5.83a2 2 0 0 1 1.92 2.56l-2.33 8A2 2 0 0 1 17.5 22H4a2 2 0 0 1-2-2v-8a2 2 0 0 1 2-2h2.76a2 2 0 0 0 1.79-1.11L12 2a3.13 3.13 0 0 1 3 3.88z"/></symbol>
+    <symbol id="i-down" viewBox="0 0 24 24"><path d="M17 14V2M9 18.12 10 14H4.17a2 2 0 0 1-1.92-2.56l2.33-8A2 2 0 0 1 6.5 2H20a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2h-2.76a2 2 0 0 0-1.79 1.11L12 22a3.13 3.13 0 0 1-3-3.88z"/></symbol>
+    <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+  </defs>
+</svg>
+<div class="app">
+  <aside class="sidebar">
+    <div class="brand"><div class="logo"><svg class="icon"><use href="#i-shield"/></svg></div><div>Monitor<span>de notícias</span></div></div>
+    <nav>
+      <div class="nav-label">Leitura</div>
+      <button class="nav-item active" data-view="criticos"><svg class="icon"><use href="#i-alert"/></svg><span class="label">Críticos</span><span class="count" data-count="criticos"></span></button>
+      <button class="nav-item" data-view="minhas"><svg class="icon"><use href="#i-cpu"/></svg><span class="label">Minhas tecnologias</span><span class="count" data-count="minhas"></span></button>
+      <button class="nav-item" data-view="paravoce"><svg class="icon"><use href="#i-sparkle"/></svg><span class="label">Para você</span><span class="count" data-count="paravoce"></span></button>
+      <button class="nav-item" data-view="seguranca"><svg class="icon"><use href="#i-lock"/></svg><span class="label">Segurança</span><span class="count" data-count="seguranca"></span></button>
+      <button class="nav-item" data-view="tecnologia"><svg class="icon"><use href="#i-news"/></svg><span class="label">Tecnologia</span><span class="count" data-count="tecnologia"></span></button>
+      <button class="nav-item" data-view="favoritos"><svg class="icon"><use href="#i-star"/></svg><span class="label">Favoritos</span><span class="count" data-count="favoritos"></span></button>
+      <button class="nav-item" data-view="todos"><svg class="icon"><use href="#i-inbox"/></svg><span class="label">Todas</span><span class="count" data-count="todos"></span></button>
+      <div class="nav-label">Programa</div>
+      <button class="nav-item" data-page="fontes"><svg class="icon"><use href="#i-rss"/></svg><span class="label">Fontes</span></button>
+      <button class="nav-item" data-page="erros"><svg class="icon"><use href="#i-error"/></svg><span class="label">Erros de coleta</span><span class="count danger" id="error-count"></span></button>
+      <button class="nav-item" data-page="config"><svg class="icon"><use href="#i-sliders"/></svg><span class="label">Configurações</span></button>
+    </nav>
+    <div class="collect-box">
+      <button id="collect-btn" class="btn primary wide"><svg class="icon"><use href="#i-refresh"/></svg><span>Coletar agora</span></button>
+      <div id="collect-status" class="muted small"></div>
+      <div class="progress"><div id="collect-bar"></div></div>
+    </div>
+  </aside>
+
+  <!-- Leitor -->
+  <main id="page-reader" class="page reader">
+    <section class="list-pane">
+      <div class="toolbar">
+        <div class="list-head"><div><h2 id="list-title">Críticos</h2><span id="list-sub" class="muted small"></span></div>
+          <button id="mark-all" class="btn small ghost" title="Marcar todas desta lista como lidas"><svg class="icon"><use href="#i-check"/></svg>Marcar lidas</button></div>
+        <div class="search"><svg class="icon"><use href="#i-search"/></svg><input id="search" type="search" placeholder="Buscar título, resumo ou CVE…"></div>
+        <div class="toolbar-row">
+          <label class="check nowrap"><input type="checkbox" id="unread-only" checked> Só não lidas</label>
+          <select id="days">
+            <option value="0">Qualquer data</option>
+            <option value="1">Último dia</option>
+            <option value="3">Últimos 3 dias</option>
+            <option value="7">Última semana</option>
+            <option value="30">Último mês</option>
+          </select>
+          <select id="sort" title="Ordenação">
+            <option value="">Ordem padrão</option>
+            <option value="afinidade">Ordenar para você</option>
+          </select>
+        </div>
+      </div>
+      <div id="item-list" class="item-list"></div>
+    </section>
+    <section id="read-pane" class="read-pane">
+      <div class="empty">
+        <p>Escolha uma notícia para ler.</p>
+        <p class="muted small">Atalhos: <kbd>j</kbd>/<kbd>k</kbd> próxima/anterior, <kbd>s</kbd> favoritar, <kbd>m</kbd> lida/não lida, <kbd>a</kbd> ler artigo, <kbd>o</kbd> abrir no navegador.</p>
+      </div>
+    </section>
+  </main>
+
+  <!-- Fontes -->
+  <main id="page-fontes" class="page scroll hidden">
+    <div class="page-head">
+      <div>
+        <h1>Fontes</h1>
+        <p class="muted">Inclua, edite, desative ou remova os sites coletados.</p>
+      </div>
+      <button id="add-source" class="btn primary"><svg class="icon"><use href="#i-plus"/></svg>Adicionar fonte</button>
+    </div>
+    <input id="source-filter" type="search" placeholder="Filtrar fontes…" class="filter">
+    <table class="table" id="sources-table">
+      <thead><tr><th>Ativa</th><th>Nome</th><th>Tipo</th><th>Categoria</th><th>Situação</th><th></th></tr></thead>
+      <tbody></tbody>
+    </table>
+  </main>
+
+  <!-- Erros -->
+  <main id="page-erros" class="page scroll hidden">
+    <div class="page-head">
+      <div>
+        <h1>Erros de coleta</h1>
+        <p class="muted" id="errors-summary"></p>
+      </div>
+      <button id="retry-failed" class="btn">Coletar só as que falharam</button>
+    </div>
+    <div id="errors-current"></div>
+    <h2>Histórico</h2>
+    <table class="table" id="errors-history">
+      <thead><tr><th>Quando</th><th>Fonte</th><th>Erro</th></tr></thead>
+      <tbody></tbody>
+    </table>
+  </main>
+
+  <!-- Configurações -->
+  <main id="page-config" class="page scroll hidden">
+    <div class="page-head">
+      <div>
+        <h1>Configurações</h1>
+        <p class="muted">As alterações valem a partir da próxima coleta.</p>
+      </div>
+      <button id="save-config" class="btn primary">Salvar configurações</button>
+    </div>
+
+    <div class="card">
+      <h2>E-mail</h2>
+      <div class="grid">
+        <label>Provedor
+          <select name="email.provider" id="email-provider">
+            <option value="outlook">Outlook / Hotmail</option>
+            <option value="office365">Microsoft 365 (empresa)</option>
+            <option value="gmail">Gmail</option>
+            <option value="yahoo">Yahoo</option>
+            <option value="custom">Outro (SMTP próprio)</option>
+          </select>
+        </label>
+        <label>Servidor SMTP <input name="email.smtp_host"></label>
+        <label>Porta <input name="email.smtp_port" type="number"></label>
+        <label>Segurança
+          <select name="email.security">
+            <option value="starttls">STARTTLS</option>
+            <option value="ssl">SSL/TLS</option>
+            <option value="none">Nenhuma</option>
+          </select>
+        </label>
+        <label>Usuário (seu e-mail) <input name="email.username" type="email" autocomplete="username"></label>
+        <label>Remetente <input name="email.from_address" type="email" placeholder="igual ao usuário"></label>
+        <label class="span2">Destinatários (separados por vírgula) <input name="email.to_addresses" data-list="comma"></label>
+        <label>Itens por seção <input name="email.max_items_per_section" type="number" min="1" max="100"></label>
+        <label class="check"><input type="checkbox" name="email.send_after_collect"> Enviar automaticamente após cada coleta</label>
+      </div>
+      <div class="password-row">
+        <label>Senha <input id="email-password" type="password" autocomplete="current-password" placeholder="senha ou senha de app"></label>
+        <button id="save-password" class="btn">Salvar senha</button>
+        <span id="password-status" class="muted small"></span>
+      </div>
+      <p class="muted small">A senha fica no cofre do sistema (Gerenciador de Credenciais do Windows ou chaveiro do Linux), nunca no arquivo de configuração.</p>
+      <div class="actions">
+        <button id="email-test" class="btn"><svg class="icon"><use href="#i-mail"/></svg>Enviar e-mail de teste</button>
+        <button id="email-preview" class="btn">Pré-visualizar resumo</button>
+        <button id="email-send" class="btn">Enviar resumo agora</button>
+        <span id="email-status" class="small"></span>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Minhas tecnologias</h2>
+      <p class="muted small">Notícias que citam estes termos sobem de prioridade e aparecem em "Minhas tecnologias".</p>
+      <div class="tags" id="tech-tags"></div>
+      <div class="inline">
+        <input id="tech-input" placeholder="Ex.: nginx, wordpress, windows server">
+        <button id="tech-add" class="btn">Adicionar</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Seus gostos</h2>
+      <p class="muted small">Use os botões <b>Gostei</b> e <b>Não curti</b> no leitor. O programa aprende com eles e
+        ordena as notícias novas na aba "Para você" (e na opção de ordenação "Para você").</p>
+      <div id="pref-status" class="pref-status"></div>
+      <div class="actions"><button id="pref-reset" class="btn ghost danger">Apagar o que foi aprendido</button></div>
+    </div>
+
+    <div class="card">
+      <h2>Palavras de prioridade</h2>
+      <div class="grid">
+        <label>Indicam gravidade crítica (uma por linha)<textarea name="priority.critical_keywords" data-list="lines" rows="8"></textarea></label>
+        <label>Indicam assunto de segurança (uma por linha)<textarea name="priority.high_keywords" data-list="lines" rows="8"></textarea></label>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Coleta</h2>
+      <div class="grid">
+        <label>Dias para trás nas APIs (KEV, NVD, GitHub) <input name="collection.days_back" type="number" min="1" max="30"></label>
+        <label>Tempo limite por site (segundos) <input name="collection.timeout_seconds" type="number" min="5" max="120"></label>
+        <label>Máximo de itens por fonte <input name="collection.max_items_per_source" type="number" min="5" max="200"></label>
+        <label>Chave da API do NVD (opcional) <input name="collection.nvd_api_key"></label>
+        <label>Token do GitHub (opcional) <input name="collection.github_token" type="password"></label>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Aparência</h2>
+      <label>Tema
+        <select name="appearance.theme" id="theme-select">
+          <option value="auto">Automático</option>
+          <option value="light">Claro</option>
+          <option value="dark">Escuro</option>
+        </select>
+      </label>
+    </div>
+  </main>
+</div>
+
+<!-- Formulário de fonte -->
+<dialog id="source-dialog">
+  <form id="source-form" method="dialog">
+    <h2 id="source-dialog-title">Adicionar fonte</h2>
+    <div class="discover">
+      <label>Endereço do site
+        <div class="inline"><input id="discover-url" placeholder="https://exemplo.com"><button type="button" id="discover-btn" class="btn">Procurar feed</button></div>
+      </label>
+      <div id="discover-result" class="small"></div>
+    </div>
+    <div class="grid">
+      <label>Nome <input name="name" required></label>
+      <label>Tipo
+        <select name="type">
+          <option value="rss">RSS / Atom</option>
+          <option value="scrape">Página sem RSS (raspagem)</option>
+          <option value="cisa_kev">CISA KEV</option>
+          <option value="nvd">NVD</option>
+          <option value="github_advisories">GitHub Advisories</option>
+        </select>
+      </label>
+      <label class="span2">URL do feed ou da página <input name="url" required></label>
+      <label>Categoria
+        <select name="category"><option value="seguranca">Segurança</option><option value="tecnologia">Tecnologia</option></select>
+      </label>
+      <label>Idioma
+        <select name="language"><option value="pt">Português</option><option value="en">Inglês</option></select>
+      </label>
+      <label class="check"><input type="checkbox" name="enabled" checked> Ativa</label>
+    </div>
+    <fieldset id="scrape-fields" class="hidden">
+      <legend>Seletores CSS (raspagem)</legend>
+      <p class="muted small">Use as ferramentas do navegador (F12, inspecionar) para achar os seletores.</p>
+      <div class="grid">
+        <label>Cada notícia <input name="item_selector" placeholder="article, .post"></label>
+        <label>Título <input name="title_selector" placeholder="h2"></label>
+        <label>Link (opcional) <input name="link_selector" placeholder="a"></label>
+        <label>Resumo (opcional) <input name="summary_selector" placeholder="p"></label>
+      </div>
+    </fieldset>
+    <div id="source-test-result" class="small"></div>
+    <div class="actions right">
+      <button type="button" id="source-test" class="btn">Testar</button>
+      <button type="button" id="source-cancel" class="btn ghost">Cancelar</button>
+      <button type="submit" id="source-save" class="btn primary">Salvar</button>
+    </div>
+  </form>
+</dialog>
+
+<div id="toast" class="toast hidden"></div>
+
+<script>
+  window.MONITOR = {token: {{ token|tojson }}, presets: {{ presets|tojson }}};
+</script>
+<script src="{{ url_for('static', filename='app.js') }}"></script>
+</body>
+</html>

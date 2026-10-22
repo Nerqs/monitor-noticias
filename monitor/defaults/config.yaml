@@ -1,0 +1,54 @@
+# Configurações gerais. Edite pelo programa (página "Configurações").
+
+collection:
+  days_back: 3            # quantos dias para trás buscar nas APIs (KEV, NVD, GitHub)
+  timeout_seconds: 20     # tempo limite por site
+  max_items_per_source: 40
+  nvd_api_key: ""         # opcional, aumenta o limite da API do NVD
+  github_token: ""        # opcional, aumenta o limite da API do GitHub
+
+interests:
+  # Tecnologias que você usa. Notícias que citam estes termos sobem de prioridade.
+  # Prefira nomes específicos ("node.js" em vez de "node") para evitar falsos alertas.
+  technologies: [php, mariadb, laravel, node.js, nodejs, npm]
+
+priority:
+  # Termos que indicam gravidade (procurados no título e resumo, sem diferenciar maiúsculas).
+  critical_keywords:
+    - zero-day
+    - 0-day
+    - actively exploited
+    - exploited in the wild
+    - remote code execution
+    - rce
+    - critical vulnerability
+    - emergency patch
+    - ransomware
+    - explorada ativamente
+    - vulnerabilidade crítica
+    - execução remota de código
+  high_keywords:
+    - vulnerability
+    - vulnerabilidade
+    - patch
+    - security update
+    - atualização de segurança
+    - backdoor
+    - data breach
+    - vazamento
+    - malware
+    - exploit
+
+email:
+  provider: outlook       # outlook | gmail | yahoo | custom
+  smtp_host: smtp-mail.outlook.com
+  smtp_port: 587
+  security: starttls      # starttls | ssl | none
+  username: ""
+  from_address: ""
+  to_addresses: []
+  send_after_collect: false
+  max_items_per_section: 15
+
+appearance:
+  theme: auto             # auto | light | dark
