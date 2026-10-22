@@ -19,7 +19,7 @@ import sys
 import threading
 import webbrowser
 
-from . import __version__, db, emailer, pipeline, web
+from . import __version__, db, emailer, pipeline, presence, web
 
 
 def _serve(app, host="127.0.0.1", port=0):
@@ -96,31 +96,76 @@ def run_resident() -> int:
         server.shutdown()
 
 
+def _open_window(url: str, on_start=None):
+    """Abre a janela própria (pywebview). Volta quando o usuário fecha a janela."""
+    import webview
+
+    window = webview.create_window("Monitor de notícias", url, width=1360, height=880, min_size=(900, 600))
+    if on_start:
+        webview.start(on_start, window)
+    else:
+        webview.start()
+    return window
+
+
+def _finish(server, code: int) -> int:
+    """Desliga o servidor e encerra o processo de vez, mesmo com uma coleta no meio."""
+    server.shutdown()
+    db.close()
+    logging.info("programa encerrado")
+    logging.shutdown()
+    os._exit(code)
+
+
 def run_gui(collect: bool, use_browser: bool) -> int:
+    # O programa é um pequeno servidor em 127.0.0.1 (só este computador acessa,
+    # com token). A janela própria, ou o navegador, só mostra as páginas dele.
     app = web.create_app()
     server, url = _serve(app)
+    logging.info("leitor em %s", url)
     if collect:
         pipeline.run_in_background()
 
     if not use_browser:
         try:
-            import webview
+            _open_window(url)
+            return _finish(server, 0)  # janela fechada: fecha tudo junto
+        except Exception:  # sem pywebview ou sem motor gráfico (WebView2 no Windows, GTK/Qt no Linux)
+            logging.exception("Janela própria indisponível; abrindo no navegador")
 
-            webview.create_window("Monitor de notícias", url, width=1360, height=880, min_size=(900, 600))
-            webview.start()
-            server.shutdown()
-            return 0
-        except Exception as exc:  # sem pywebview ou sem backend gráfico (comum no Linux)
-            print(f"Janela própria indisponível ({exc}). Abrindo no navegador.")
-
-    print(f"Monitor de notícias aberto em {url}  (Ctrl+C para sair)")
+    # Modo navegador: encerra quando a última aba fecha (ou com Ctrl+C no terminal).
+    print(f"Monitor de notícias aberto em {url}  (feche a aba ou use Ctrl+C para sair)")
     webbrowser.open(url)
     try:
-        threading.Event().wait()
+        presence.wait_until_gone()
     except KeyboardInterrupt:
         pass
+    return _finish(server, 0)
+
+
+def window_test(seconds: float = 60.0) -> int:
+    """Abre a janela própria, confere que a página carregou e fecha (usado no CI)."""
+    import webview
+
+    app = web.create_app()
+    server, url = _serve(app)
+    result = {"title": None}
+
+    def check(window):
+        if window.events.loaded.wait(seconds):
+            result["title"] = window.evaluate_js("document.title")
+        window.destroy()
+
+    try:
+        _open_window(url, check)
+    except Exception:
+        logging.exception("testar-janela: falhou ao abrir")
+    ok = bool(result["title"])
+    msg = f"testar-janela: motor={getattr(webview, 'renderer', '?')}, título={result['title']!r} -> {'OK' if ok else 'FALHOU'}"
+    logging.info(msg)
+    print(msg)
     server.shutdown()
-    return 0
+    return 0 if ok else 1
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -133,6 +178,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--residente", action="store_true", help="fica na bandeja e avisa sobre falhas críticas")
     parser.add_argument("--version", action="version", version=__version__)
     parser.add_argument("--autoteste", action="store_true", help=argparse.SUPPRESS)
+    parser.add_argument("--testar-janela", action="store_true", help=argparse.SUPPRESS)
     args = parser.parse_args(argv)
 
     from . import logsetup
@@ -141,6 +187,8 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.autoteste:
         return self_test()
+    if args.testar_janela:
+        return window_test()
     if args.diagnostico:
         from . import diagnostics
 

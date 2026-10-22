@@ -16,7 +16,7 @@ from flask import Flask, Response, abort, g, jsonify, render_template, request
 
 from . import __version__
 from . import (backup, config, cveinfo, db, diagnostics, emailer, fetchers, health, linkcheck, logsetup,
-               maintenance, notify, oauth, pipeline, preferences, scheduler, secrets, selfcheck, updates)
+               maintenance, notify, oauth, pipeline, preferences, presence, scheduler, secrets, selfcheck, updates)
 from .sanitize import clean_html
 
 API_TOKEN = pysecrets.token_urlsafe(24)
@@ -173,6 +173,16 @@ def create_app(token: str = API_TOKEN) -> Flask:
     @app.post("/api/items/mark-all-read")
     def items_mark_all():
         return jsonify({"marked": db.mark_all_read(body().get("view", "todos"))})
+
+    @app.post("/api/heartbeat")
+    def heartbeat():
+        presence.beat()
+        return jsonify({"ok": True})
+
+    @app.post("/api/bye")
+    def bye():
+        presence.bye()
+        return jsonify({"ok": True})
 
     @app.get("/api/counts")
     def counts():
