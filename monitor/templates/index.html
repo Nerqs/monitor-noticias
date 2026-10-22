@@ -7,7 +7,7 @@
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 24 24%22 fill=%22none%22 stroke=%22%232f6fde%22 stroke-width=%222%22%3E%3Cpath d=%22M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z%22/%3E%3C/svg%3E">
 <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
-<body class="{{ 'android' if android else 'desktop' }}">
+<body class="{{ 'android' if android else 'desktop' }}" data-check-updates="{{ 1 if check_updates else 0 }}">
 <svg xmlns="http://www.w3.org/2000/svg" style="display:none">
   <defs>
     <symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="m9 12 2 2 4-4"/></symbol>
@@ -225,10 +225,11 @@
     <div class="card desktop-only">
       <h2>Atualização</h2>
       <p id="update-status" class="small">Versão instalada: {{ version }}.</p>
-      <p class="muted small">O pacote novo só é aceito se o hash SHA-256 conferir com o publicado no GitHub.</p>
+      <p class="muted small">O pacote novo só é aceito se o hash SHA-256 conferir com o publicado no GitHub. Seus dados ficam onde estão.</p>
       <div class="actions">
         <button id="update-check" class="btn">Verificar atualização</button>
-        <button id="update-download" class="btn primary hidden">Baixar e conferir</button>
+        <button id="update-apply" class="btn primary hidden">Atualizar agora</button>
+        <button id="update-download" class="btn hidden">Só baixar e conferir</button>
         <button class="btn ghost hidden" id="update-folder" data-folder="atualizacoes">Abrir pasta</button>
       </div>
     </div>
@@ -481,6 +482,7 @@
           </select>
         </label>
         <label class="check"><input type="checkbox" name="reader.block_remote_images"> Bloquear imagens de outros sites nos artigos (evita rastreamento)</label>
+        <label class="check desktop-only"><input type="checkbox" name="updates.check_on_start"> Ao abrir, avisar quando sair versão nova</label>
       </div>
     </div>
   </main>
@@ -549,6 +551,15 @@
   </form>
 </dialog>
 
+<div id="update-banner" class="update-banner hidden" role="status">
+  <svg class="icon"><use href="#i-refresh"/></svg>
+  <div class="update-text"><b id="update-banner-title"></b><span id="update-banner-text" class="muted small"></span></div>
+  <div class="actions">
+    <button id="update-now" class="btn primary small">Atualizar agora</button>
+    <button id="update-later" class="btn ghost small">Depois</button>
+    <button id="update-skip" class="btn ghost small">Pular esta versão</button>
+  </div>
+</div>
 <div id="toast" class="toast hidden"></div>
 
 <script nonce="{{ nonce }}">

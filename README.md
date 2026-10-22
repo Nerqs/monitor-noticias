@@ -46,6 +46,23 @@ resumo bonito por e-mail.
 | --- | --- |
 | ![Leitor](docs/leitor-escuro.png) | ![Para você](docs/para-voce.png) |
 
+## Instalar no Windows
+
+1. Abra a página de [versões](https://github.com/Nerqs/monitor-noticias/releases/latest).
+2. Baixe **MonitorNoticias-instalador-windows.exe** e abra.
+3. Siga o assistente. Ele cria o atalho na área de trabalho e no menu Iniciar, e o programa aparece em
+   "Aplicativos instalados" para desinstalar.
+
+Por padrão instala só para você, sem pedir senha de administrador; no assistente dá para escolher "para
+todos os usuários" (Arquivos de Programas). Os dados ficam em `%LOCALAPPDATA%\MonitorNoticias` e não são
+apagados ao desinstalar. Quem já usava a versão .zip não perde nada: na primeira vez que abre, a versão
+instalada copia os dados da pasta `data` do .zip (e deixa um aviso `DADOS-MOVIDOS.txt` lá).
+
+**Atualização automática:** ao abrir, o programa consulta o GitHub e, se houver versão nova, mostra um
+aviso com **Atualizar agora**. Com um clique ele baixa, confere o SHA-256, fecha, instala por cima e abre
+de novo. Na versão .zip o mesmo botão abre o instalador; no Linux ele troca o executável. Dá para desligar o
+aviso em Configurações → Aparência e leitura.
+
 ## Baixar e usar (sem instalar nada)
 
 1. Abra a página de [versões](https://github.com/Nerqs/monitor-noticias/releases/latest).
@@ -241,6 +258,8 @@ python -m venv .venv
 ```
 
 Para gerar o executável: `pip install pyinstaller` e `python empacotar.py` (o resultado fica em `dist/`).
+No Windows, com o [Inno Setup 6](https://jrsoftware.org/isinfo.php) instalado, sai também o instalador
+(`instalador/MonitorNoticias.iss`).
 O GitHub Actions faz isso a cada PR para Windows e Linux. Ao criar uma tag `v*`
 (ex.: `git tag v0.2.0 && git push origin v0.2.0`), os pacotes são publicados em Releases junto com o
 `SHA256SUMS.txt` que o botão **Verificar atualização** usa para conferir o download.
@@ -260,7 +279,7 @@ monitor/
   notify.py       Telegram, Discord e Teams
   oauth.py        login OAuth2 da Microsoft para o e-mail
   selfcheck.py    autoauditoria das bibliotecas (OSV)
-  updates.py      verificação de atualização com SHA-256
+  updates.py      atualização com SHA-256 e troca automática da versão
   backup.py       backup, importação e OPML
   maintenance.py  faxina do banco
   logsetup.py     log em arquivo e relatório para suporte

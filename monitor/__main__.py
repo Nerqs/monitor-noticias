@@ -193,6 +193,35 @@ def window_test(seconds: float = 60.0) -> int:
     return 0 if ok else 1
 
 
+def _prepare_data():
+    """Versão .zip anota onde guarda os dados; a instalada copia esses dados na 1ª vez."""
+    from . import config
+
+    try:
+        if config.is_installed():
+            return config.migrate_portable()
+        config.remember_portable()
+    except OSError:
+        pass  # sem permissão ou disco cheio: segue com a pasta como está
+    return None
+
+
+def _reschedule() -> None:
+    """Coleta agendada e alertas apontavam para o .exe antigo: aponta para o instalado."""
+    from . import config, scheduler
+
+    cfg = config.load_config()
+    for name, check, install in (("coleta", lambda: cfg.get("schedule", {}).get("installed"),
+                                  lambda: scheduler.install(cfg)),
+                                 ("alertas", scheduler.resident_installed, scheduler.install_resident)):
+        try:
+            if check():
+                install()
+                logging.info("agendamento de %s refeito para a versão instalada", name)
+        except Exception:
+            logging.exception("não foi possível refazer o agendamento de %s", name)
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="monitor", description="Monitor de notícias de tecnologia")
     parser.add_argument("--coletar", action="store_true", help="começa a coletar assim que abrir")
@@ -208,7 +237,13 @@ def main(argv: list[str] | None = None) -> int:
 
     from . import logsetup
 
+    migrated = None
+    if not args.autoteste:
+        migrated = _prepare_data()
     logsetup.setup()
+    if migrated:
+        logging.info("dados da versão .zip copiados de %s", migrated)
+        _reschedule()
 
     if args.autoteste:
         return self_test()

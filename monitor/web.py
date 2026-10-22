@@ -94,6 +94,7 @@ def create_app(token: str = API_TOKEN) -> Flask:
             nonce=g.nonce,
             version=__version__,
             android=config.is_android(),
+            check_updates=bool(cfg.get("updates", {}).get("check_on_start", True)) and not config.is_android(),
             theme=cfg.get("appearance", {}).get("theme", "auto"),
             source_types=config.SOURCE_TYPES,
             presets=config.EMAIL_PRESETS,
@@ -477,6 +478,19 @@ def create_app(token: str = API_TOKEN) -> Flask:
     @app.post("/api/updates/download")
     def updates_download():
         return jsonify(updates.download())
+
+    @app.post("/api/updates/apply")
+    def updates_apply():
+        result = updates.apply()
+        updates.exit_soon()
+        return jsonify(result)
+
+    @app.post("/api/updates/skip")
+    def updates_skip():
+        cfg = config.load_config()
+        cfg.setdefault("updates", {})["skip_version"] = str(body().get("version") or "")
+        config.save_config(cfg)
+        return jsonify({"ok": True})
 
     # --- Backup -----------------------------------------------------------
 
