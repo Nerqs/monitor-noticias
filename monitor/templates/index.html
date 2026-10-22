@@ -50,12 +50,12 @@
   <aside class="sidebar">
     <div class="brand"><div class="logo"><svg class="icon"><use href="#i-shield"/></svg></div><div>Monitor<span>de notícias</span></div></div>
     <nav>
-      <div class="nav-label">Leitura</div>
+      <div class="nav-label">Tecnologia</div>
       <button class="nav-item active" data-view="criticos"><svg class="icon"><use href="#i-alert"/></svg><span class="label">Críticos</span><span class="count" data-count="criticos"></span></button>
       <button class="nav-item" data-view="minhas"><svg class="icon"><use href="#i-cpu"/></svg><span class="label">Minhas tecnologias</span><span class="count" data-count="minhas"></span></button>
       <button class="nav-item" data-view="paravoce"><svg class="icon"><use href="#i-sparkle"/></svg><span class="label">Para você</span><span class="count" data-count="paravoce"></span></button>
       <button class="nav-item" data-view="seguranca"><svg class="icon"><use href="#i-lock"/></svg><span class="label">Segurança</span><span class="count" data-count="seguranca"></span></button>
-      <button class="nav-item" data-view="tecnologia"><svg class="icon"><use href="#i-news"/></svg><span class="label">Tecnologia</span><span class="count" data-count="tecnologia"></span></button>
+      <button class="nav-item" data-view="tecnologia"><svg class="icon"><use href="#i-news"/></svg><span class="label">Novidades</span><span class="count" data-count="tecnologia"></span></button>
       <button class="nav-item" data-view="favoritos"><svg class="icon"><use href="#i-star"/></svg><span class="label">Favoritos</span><span class="count" data-count="favoritos"></span></button>
       <button class="nav-item" data-view="todos"><svg class="icon"><use href="#i-inbox"/></svg><span class="label">Todas</span><span class="count" data-count="todos"></span></button>
       <div class="nav-label games-label">Games</div>
@@ -170,29 +170,36 @@
   </main>
 
   <!-- Saúde do programa -->
-  <main id="page-saude" class="page scroll hidden">
-    <div class="page-head">
-      <div>
-        <h1>Saúde do programa</h1>
-        <p class="muted" id="health-sub"></p>
+  <main id="page-saude" class="page scroll hidden" data-tabs>
+    <div class="page-top">
+      <div class="page-head">
+        <div>
+          <h1>Saúde do programa</h1>
+          <p class="muted" id="health-sub"></p>
+        </div>
+        <button id="diag-run" class="btn primary"><svg class="icon"><use href="#i-pulse"/></svg>Rodar diagnóstico</button>
       </div>
-      <button id="diag-run" class="btn primary"><svg class="icon"><use href="#i-pulse"/></svg>Rodar diagnóstico</button>
+      <div class="tabs" role="tablist" aria-label="Seções da saúde do programa">
+        <button type="button" role="tab" data-tab="diagnostico"><svg class="icon"><use href="#i-pulse"/></svg>Diagnóstico</button>
+        <button type="button" role="tab" data-tab="agendamento" class="desktop-only"><svg class="icon"><use href="#i-calendar"/></svg>Agendamento e alertas</button>
+        <button type="button" role="tab" data-tab="manutencao"><svg class="icon"><use href="#i-sliders"/></svg>Manutenção</button>
+      </div>
     </div>
 
-    <div class="card">
+    <div class="card" data-tab="diagnostico">
       <h2>Diagnóstico</h2>
       <p class="muted small">Confere Python, bibliotecas, pasta de dados, banco, cofre de senhas, internet, relógio, e-mail e agendamento.</p>
       <div id="diag-list" class="checks"></div>
     </div>
 
-    <div class="card">
+    <div class="card" data-tab="diagnostico">
       <h2>Bibliotecas do programa</h2>
       <p class="muted small">Uma vez por dia o programa confere as próprias bibliotecas na base de falhas OSV.</p>
       <div id="selfcheck-box"></div>
       <div class="actions"><button id="selfcheck-run" class="btn">Conferir agora</button></div>
     </div>
 
-    <div class="card desktop-only">
+    <div class="card desktop-only" data-tab="agendamento">
       <h2>Coleta automática</h2>
       <div class="grid">
         <label>Horário <input id="sched-time" type="time" value="07:00"></label>
@@ -206,7 +213,7 @@
         <button id="sched-remove" class="btn ghost danger">Remover agendamento</button>
       </div>
       <h3>Alertas na área de trabalho</h3>
-      <p class="muted small">O modo de alertas fica perto do relógio e avisa quando surge uma falha crítica. Ajuste o intervalo em Configurações → Alertas.</p>
+      <p class="muted small">O modo de alertas fica perto do relógio e avisa quando surge uma falha crítica. Ajuste o intervalo em Configurações → E-mail e avisos.</p>
       <p id="resident-status" class="small"></p>
       <div class="actions">
         <button id="resident-on" class="btn">Iniciar alertas com o sistema</button>
@@ -214,7 +221,7 @@
       </div>
     </div>
 
-    <div class="card">
+    <div class="card" data-tab="manutencao">
       <h2>Banco de dados</h2>
       <p id="db-status" class="small"></p>
       <p class="muted small">A faxina roda sozinha uma vez por dia: apaga notícias com mais de 90 dias (menos favoritas e as que você avaliou) e compacta o arquivo.</p>
@@ -222,7 +229,7 @@
         <button class="btn ghost desktop-only" data-folder="dados">Abrir pasta de dados</button></div>
     </div>
 
-    <div class="card desktop-only">
+    <div class="card desktop-only" data-tab="manutencao">
       <h2>Atualização</h2>
       <p id="update-status" class="small">Versão instalada: {{ version }}.</p>
       <p class="muted small">O pacote novo só é aceito se o hash SHA-256 conferir com o publicado no GitHub. Seus dados ficam onde estão.</p>
@@ -234,7 +241,7 @@
       </div>
     </div>
 
-    <div class="card">
+    <div class="card" data-tab="diagnostico">
       <h2>Relatório para suporte</h2>
       <p class="muted small">Junta versão, sistema, erros da última coleta, diagnóstico e o fim do log, sem senhas nem tokens.</p>
       <textarea id="report-text" rows="8" readonly class="mono hidden"></textarea>
@@ -246,81 +253,102 @@
   </main>
 
   <!-- Configurações -->
-  <main id="page-config" class="page scroll hidden">
-    <div class="page-head">
-      <div>
-        <h1>Configurações</h1>
-        <p class="muted">As alterações valem a partir da próxima coleta.</p>
+  <main id="page-config" class="page scroll hidden" data-tabs>
+    <div class="page-top">
+      <div class="page-head">
+        <div>
+          <h1>Configurações</h1>
+          <p class="muted">As alterações valem a partir da próxima coleta.</p>
+        </div>
+        <button id="save-config" class="btn primary">Salvar configurações</button>
       </div>
-      <button id="save-config" class="btn primary">Salvar configurações</button>
+      <div class="tabs" role="tablist" aria-label="Seções das configurações">
+        <button type="button" role="tab" data-tab="avisos"><svg class="icon"><use href="#i-mail"/></svg>E-mail e avisos</button>
+        <button type="button" role="tab" data-tab="interesses"><svg class="icon"><use href="#i-cpu"/></svg>O que monitorar</button>
+        <button type="button" role="tab" data-tab="games"><svg class="icon"><use href="#i-game"/></svg>Games</button>
+        <button type="button" role="tab" data-tab="coleta"><svg class="icon"><use href="#i-rss"/></svg>Coleta</button>
+        <button type="button" role="tab" data-tab="aparencia"><svg class="icon"><use href="#i-sliders"/></svg>Aparência e backup</button>
+      </div>
     </div>
 
-    <div class="card">
+    <div class="card" data-tab="avisos">
       <h2>E-mail</h2>
-      <div class="grid">
-        <label>Provedor
-          <select name="email.provider" id="email-provider">
-            <option value="outlook">Outlook / Hotmail</option>
-            <option value="office365">Microsoft 365 (empresa)</option>
-            <option value="gmail">Gmail</option>
-            <option value="yahoo">Yahoo</option>
-            <option value="custom">Outro (SMTP próprio)</option>
-          </select>
-        </label>
-        <label>Servidor SMTP <input name="email.smtp_host"></label>
-        <label>Porta <input name="email.smtp_port" type="number"></label>
-        <label>Segurança
-          <select name="email.security">
-            <option value="starttls">STARTTLS</option>
-            <option value="ssl">SSL/TLS</option>
-            <option value="none">Nenhuma</option>
-          </select>
-        </label>
-        <label>Usuário (seu e-mail) <input name="email.username" type="email" autocomplete="username"></label>
-        <label>Remetente <input name="email.from_address" type="email" placeholder="igual ao usuário"></label>
-        <label class="span2">Destinatários (separados por vírgula) <input name="email.to_addresses" data-list="comma"></label>
-        <label>Itens por seção <input name="email.max_items_per_section" type="number" min="1" max="100"></label>
-        <label class="check"><input type="checkbox" name="email.send_after_collect"> Enviar automaticamente após cada coleta</label>
-      </div>
-      <div class="grid">
-        <label>Forma de login
-          <select name="email.auth" id="email-auth">
-            <option value="password">Senha (ou senha de app)</option>
-            <option value="oauth_microsoft">Conta Microsoft (OAuth2, recomendado no Outlook)</option>
-          </select>
-        </label>
-      </div>
-      <div id="auth-password">
-        <div class="password-row">
-          <label>Senha <input id="email-password" type="password" autocomplete="current-password" placeholder="senha ou senha de app"></label>
-          <button id="save-password" class="btn">Salvar senha</button>
-          <span id="password-status" class="muted small"></span>
-        </div>
-        <p class="muted small">A senha fica no cofre do sistema (Gerenciador de Credenciais do Windows ou chaveiro do Linux), nunca no arquivo de configuração.</p>
-      </div>
-      <div id="auth-oauth" class="hidden">
+      <p class="muted small">Resumo das notícias no seu e-mail, com o mesmo visual do leitor.</p>
+      <div class="section">
+        <div class="section-head"><h3>Servidor</h3><p class="muted small">Escolha o provedor e os campos se preenchem sozinhos.</p></div>
         <div class="grid">
-          <label>ID do aplicativo (Azure) <input name="email.oauth_client_id" placeholder="00000000-0000-0000-0000-000000000000"></label>
-          <label>Tipo de conta <input name="email.oauth_tenant" placeholder="automático (consumers ou organizations)"></label>
+          <label>Provedor
+            <select name="email.provider" id="email-provider">
+              <option value="outlook">Outlook / Hotmail</option>
+              <option value="office365">Microsoft 365 (empresa)</option>
+              <option value="gmail">Gmail</option>
+              <option value="yahoo">Yahoo</option>
+              <option value="custom">Outro (SMTP próprio)</option>
+            </select>
+          </label>
+          <label>Servidor SMTP <input name="email.smtp_host"></label>
+          <label>Porta <input name="email.smtp_port" type="number"></label>
+          <label>Segurança
+            <select name="email.security">
+              <option value="starttls">STARTTLS</option>
+              <option value="ssl">SSL/TLS</option>
+              <option value="none">Nenhuma</option>
+            </select>
+          </label>
+        </div>
+      </div>
+      <div class="section">
+        <div class="section-head"><h3>Conta</h3><p class="muted small">Quem envia e como o programa entra na conta.</p></div>
+        <div class="grid">
+          <label>Usuário (seu e-mail) <input name="email.username" type="email" autocomplete="username"></label>
+          <label>Remetente <input name="email.from_address" type="email" placeholder="igual ao usuário"></label>
+          <label>Forma de login
+            <select name="email.auth" id="email-auth">
+              <option value="password">Senha (ou senha de app)</option>
+              <option value="oauth_microsoft">Conta Microsoft (OAuth2, recomendado no Outlook)</option>
+            </select>
+          </label>
+        </div>
+        <div id="auth-password">
+          <div class="password-row">
+            <label>Senha <input id="email-password" type="password" autocomplete="current-password" placeholder="senha ou senha de app"></label>
+            <button id="save-password" class="btn">Salvar senha</button>
+            <span id="password-status" class="muted small"></span>
+          </div>
+          <p class="muted small">A senha fica no cofre do sistema (Gerenciador de Credenciais do Windows ou chaveiro do Linux), nunca no arquivo de configuração.</p>
+        </div>
+        <div id="auth-oauth" class="hidden">
+          <div class="grid">
+            <label>ID do aplicativo (Azure) <input name="email.oauth_client_id" placeholder="00000000-0000-0000-0000-000000000000"></label>
+            <label>Tipo de conta <input name="email.oauth_tenant" placeholder="automático (consumers ou organizations)"></label>
+          </div>
+          <div class="actions">
+            <button id="oauth-connect" class="btn">Conectar conta Microsoft</button>
+            <button id="oauth-disconnect" class="btn ghost danger">Desconectar</button>
+            <span id="oauth-status" class="small"></span>
+          </div>
+          <div id="oauth-code" class="oauth-code hidden"></div>
+          <p class="muted small">O programa não vê sua senha: você entra no site da Microsoft e autoriza só o envio de e-mail. O ID do aplicativo é criado uma vez no portal do Azure (passo a passo no README).</p>
+        </div>
+      </div>
+      <div class="section">
+        <div class="section-head"><h3>Envio</h3><p class="muted small">Para quem vai e quando.</p></div>
+        <div class="grid">
+          <label class="span2">Destinatários (separados por vírgula) <input name="email.to_addresses" data-list="comma"></label>
+          <label>Itens por seção <input name="email.max_items_per_section" type="number" min="1" max="100"></label>
+          <label class="check align-end"><input type="checkbox" name="email.send_after_collect"> Enviar automaticamente após cada coleta</label>
         </div>
         <div class="actions">
-          <button id="oauth-connect" class="btn">Conectar conta Microsoft</button>
-          <button id="oauth-disconnect" class="btn ghost danger">Desconectar</button>
-          <span id="oauth-status" class="small"></span>
+          <button id="email-test" class="btn"><svg class="icon"><use href="#i-mail"/></svg>Enviar e-mail de teste</button>
+          <button id="email-preview" class="btn">Pré-visualizar resumo</button>
+          <button id="email-preview-games" class="btn">Pré-visualizar resumo de games</button>
+          <button id="email-send" class="btn">Enviar resumo agora</button>
+          <span id="email-status" class="small"></span>
         </div>
-        <div id="oauth-code" class="oauth-code hidden"></div>
-        <p class="muted small">O programa não vê sua senha: você entra no site da Microsoft e autoriza só o envio de e-mail. O ID do aplicativo é criado uma vez no portal do Azure (passo a passo no README).</p>
-      </div>
-      <div class="actions">
-        <button id="email-test" class="btn"><svg class="icon"><use href="#i-mail"/></svg>Enviar e-mail de teste</button>
-        <button id="email-preview" class="btn">Pré-visualizar resumo</button>
-        <button id="email-preview-games" class="btn">Pré-visualizar resumo de games</button>
-        <button id="email-send" class="btn">Enviar resumo agora</button>
-        <span id="email-status" class="small"></span>
       </div>
     </div>
 
-    <div class="card">
+    <div class="card" data-tab="interesses">
       <h2>Minhas tecnologias</h2>
       <p class="muted small">Notícias que citam estes termos sobem de prioridade e aparecem em "Minhas tecnologias".</p>
       <div class="tags" id="tech-tags"></div>
@@ -330,7 +358,7 @@
       </div>
     </div>
 
-    <div class="card">
+    <div class="card" data-tab="games">
       <h2>Games</h2>
       <p class="muted small">As notícias de games ficam numa área separada (menu <b>Games</b>), com curtidas, favoritos e e-mail próprios. As fontes de games estão em Fontes, na categoria "Games".</p>
       <h3>Jogos e plataformas que você acompanha</h3>
@@ -349,7 +377,7 @@
       </div>
     </div>
 
-    <div class="card">
+    <div class="card" data-tab="interesses">
       <h2>Versões que você usa</h2>
       <p class="muted small">Com a versão de cada produto, o programa consulta o NVD e diz se uma falha <b>afeta a sua versão</b> (sobe a prioridade) ou não (desce).</p>
       <table class="table compact" id="versions-table">
@@ -362,7 +390,7 @@
       </div>
     </div>
 
-    <div class="card">
+    <div class="card" data-tab="interesses">
       <h2>Filtros pessoais</h2>
       <p class="muted small"><b>Silenciar</b> esconde notícias com o termo. <b>Destacar</b> sobe a prioridade. Vale para todas as fontes ou só para uma.</p>
       <table class="table compact" id="rules-table">
@@ -378,7 +406,7 @@
       <p class="small"><a href="#" id="see-muted">Ver notícias silenciadas</a></p>
     </div>
 
-    <div class="card">
+    <div class="card" data-tab="avisos">
       <h2>Celular (Telegram, Discord ou Teams)</h2>
       <p class="muted small">Depois de cada coleta, as notícias críticas e altas que ainda não foram enviadas chegam no chat.</p>
       <div class="grid">
@@ -402,13 +430,13 @@
       <div class="actions"><button id="chat-test" class="btn">Enviar mensagem de teste</button><span id="chat-status" class="small"></span></div>
     </div>
 
-    <div class="card android-only">
+    <div class="card android-only" data-tab="avisos">
       <h2>Celular</h2>
       <label class="check"><input type="checkbox" name="android.collect_on_open"> Coletar sempre que abrir o app</label>
       <p class="muted small">O Android não deixa o app coletar escondido sem gastar bateria. Para ser avisado na hora, ligue o envio para o Telegram acima: ele roda no seu computador.</p>
     </div>
 
-    <div class="card desktop-only">
+    <div class="card desktop-only" data-tab="avisos">
       <h2>Alertas na área de trabalho</h2>
       <p class="muted small">Valem para o modo de alertas (ligue em Saúde do programa ou rode <code>--residente</code>).</p>
       <div class="grid">
@@ -421,7 +449,7 @@
       </div>
     </div>
 
-    <div class="card">
+    <div class="card" data-tab="interesses">
       <h2>Seus gostos</h2>
       <p class="muted small">Use os botões <b>Gostei</b> e <b>Não curti</b> no leitor. O programa aprende com eles e
         ordena as notícias novas na aba "Para você" (e na opção de ordenação "Para você").</p>
@@ -434,7 +462,7 @@
       <div class="actions"><button id="pref-reset-games" class="btn ghost danger">Apagar o que foi aprendido em games</button></div>
     </div>
 
-    <div class="card">
+    <div class="card" data-tab="interesses">
       <h2>Palavras de prioridade</h2>
       <div class="grid">
         <label>Indicam gravidade crítica (uma por linha)<textarea name="priority.critical_keywords" data-list="lines" rows="8"></textarea></label>
@@ -442,24 +470,38 @@
       </div>
     </div>
 
-    <div class="card">
+    <div class="card" data-tab="coleta">
       <h2>Coleta</h2>
-      <div class="grid">
-        <label>Dias para trás nas APIs (KEV, NVD, GitHub) <input name="collection.days_back" type="number" min="1" max="30"></label>
-        <label>Tempo limite por site (segundos) <input name="collection.timeout_seconds" type="number" min="5" max="120"></label>
-        <label>Máximo de itens por fonte <input name="collection.max_items_per_source" type="number" min="5" max="200"></label>
-        <label>Chave da API do NVD (opcional) <input name="collection.nvd_api_key"></label>
-        <label>Token do GitHub (opcional) <input name="collection.github_token" type="password"></label>
-        <label>Tamanho máximo por download (MB) <input name="collection.max_download_mb" type="number" min="1" max="100"></label>
-        <label>Dias sem novidade para avisar fonte silenciosa <input name="health.silent_days" type="number" min="2" max="60"></label>
-        <label>Consultas ao NVD por coleta (checar versões) <input name="enrichment.max_nvd_lookups" type="number" min="0" max="100"></label>
-        <label class="check"><input type="checkbox" name="enrichment.epss"> Consultar a chance de exploração (EPSS)</label>
-        <label class="check"><input type="checkbox" name="collection.allow_private_networks"> Permitir sites da rede interna (intranet)</label>
-        <label>Guardar notícias por (dias) <input name="maintenance.keep_days" type="number" min="7" max="3650"></label>
+      <p class="muted small">Quanto buscar em cada site e por quanto tempo esperar.</p>
+      <div class="section">
+        <div class="section-head"><h3>Sites e feeds</h3></div>
+        <div class="grid">
+          <label>Tempo limite por site (segundos) <input name="collection.timeout_seconds" type="number" min="5" max="120"></label>
+          <label>Máximo de itens por fonte <input name="collection.max_items_per_source" type="number" min="5" max="200"></label>
+          <label>Tamanho máximo por download (MB) <input name="collection.max_download_mb" type="number" min="1" max="100"></label>
+          <label>Dias sem novidade para avisar fonte silenciosa <input name="health.silent_days" type="number" min="2" max="60"></label>
+          <label class="check span2"><input type="checkbox" name="collection.allow_private_networks"> Permitir sites da rede interna (intranet)</label>
+        </div>
+      </div>
+      <div class="section">
+        <div class="section-head"><h3>Bases de falhas (KEV, NVD, GitHub, EPSS)</h3></div>
+        <div class="grid">
+          <label>Dias para trás nas APIs (KEV, NVD, GitHub) <input name="collection.days_back" type="number" min="1" max="30"></label>
+          <label>Consultas ao NVD por coleta (checar versões) <input name="enrichment.max_nvd_lookups" type="number" min="0" max="100"></label>
+          <label>Chave da API do NVD (opcional) <input name="collection.nvd_api_key"></label>
+          <label>Token do GitHub (opcional) <input name="collection.github_token" type="password"></label>
+          <label class="check span2"><input type="checkbox" name="enrichment.epss"> Consultar a chance de exploração (EPSS)</label>
+        </div>
+      </div>
+      <div class="section">
+        <div class="section-head"><h3>Armazenamento</h3></div>
+        <div class="grid">
+          <label>Guardar notícias por (dias) <input name="maintenance.keep_days" type="number" min="7" max="3650"></label>
+        </div>
       </div>
     </div>
 
-    <div class="card">
+    <div class="card" data-tab="aparencia">
       <h2>Backup</h2>
       <p class="muted small">Fontes, configurações, curtidas e favoritos. Senhas e tokens ficam fora do arquivo.</p>
       <div class="actions">
@@ -471,7 +513,7 @@
       </div>
     </div>
 
-    <div class="card">
+    <div class="card" data-tab="aparencia">
       <h2>Aparência e leitura</h2>
       <div class="grid">
         <label>Tema

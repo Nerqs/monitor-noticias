@@ -99,3 +99,18 @@ def test_config_merge_keeps_new_defaults(data_dir):
     del cfg["appearance"]
     config.save_config(cfg)
     assert config.load_config()["appearance"]["theme"] == "auto"
+
+
+def test_index_sections_and_tabs():
+    import re
+
+    html = web.create_app("t").test_client().get("/").get_data(as_text=True)
+    assert '<div class="nav-label">Tecnologia</div>' in html
+    assert "Leitura</div>" not in html
+    for page in ("config", "saude"):
+        body = html.split(f'id="page-{page}"', 1)[1].split("</main>", 1)[0]
+        tabs = set(re.findall(r'role="tab" data-tab="([a-z]+)"', body))
+        cards = re.findall(r'<div class="card[^"]*"( data-tab="([a-z]+)")?>', body)
+        # Todo cartão diz em que aba fica, e toda aba usada existe na barra.
+        assert cards and all(tab for _, tab in cards)
+        assert {tab for _, tab in cards} == tabs
