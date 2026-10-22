@@ -72,7 +72,8 @@ LINUX_SYSTEM_LIBS = (
     # Só vêm pelo plugin de tema GTK do Qt, que também fica de fora.
     "libgtk-3", "libgdk-3", "libgdk_pixbuf", "libatk", "libatspi", "libcairo", "libpango",
     "libpixman", "libepoxy", "libthai", "libdatrie", "libfribidi", "libgraphite2", "libcups",
-    "libavahi", "libgnutls", "libgssapi", "libkrb5", "libk5crypto", "libcom_err",
+    "libavahi", "libgnutls",
+    # A libgssapi_krb5 (do QtNetwork) fica dentro: o runtime do Flatpak não a traz.
 )
 
 
